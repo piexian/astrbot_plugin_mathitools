@@ -1,2 +1,2 @@
-mpmath
-asteval
+mpmath>=1.3,<2
+asteval>=1.0,<2

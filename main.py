@@ -1,133 +1,50 @@
-from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
-from astrbot.api.star import Context, Star, register
-from astrbot.api import logger, AstrBotConfig
+"""astrbot_plugin_mathitools 入口：注册 10 个数学 FunctionTool，计算逻辑在 core/。"""
 
-import mpmath
-from decimal import Decimal
-import re
-from asteval import Interpreter, get_ast_names
+from astrbot.api import AstrBotConfig, logger
+from astrbot.api.star import Context, Star
 
-@register(
-    "astrbot_plugin_mathitools",
-    "NekoiMeiov_Team",
-    "增加较为简单的高精度数学运算工具",
-    "2.1.3",
-    "https://github.com/NekoiMeiov/astrbot_plugin_mathitools"
+from math_tools import (
+    MathBatchTool,
+    MathCompareTool,
+    MathEvalTool,
+    MathFinanceTool,
+    MathFunctionsTool,
+    MathMatrixTool,
+    MathNaturalLanguageUnitsTool,
+    MathNumberTheoryTool,
+    MathStatisticsTool,
+    MathUnitsTool,
 )
-class MathITools(Star):
-    # MathITools简称MIT（？还带整活的
+
+DEFAULT_DPS = 20
+MIN_DPS = 1
+MAX_DPS = 200
+
+
+def _sanitize_dps(config: AstrBotConfig) -> int:
+    dps = config.get("dps", DEFAULT_DPS)
+    if isinstance(dps, bool) or not isinstance(dps, int) or not MIN_DPS <= dps <= MAX_DPS:
+        logger.error(f"配置 dps={dps!r} 非法，应为 {MIN_DPS}..{MAX_DPS} 的整数，回落为 {DEFAULT_DPS}")
+        return DEFAULT_DPS
+    return dps
+
+
+class MathitoolsPlugin(Star):
+    """数学工具集插件。"""
+
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
-        mpmath.mp.dps = config.get("dps", 50)
-        logger.info(f"精度(dps)已设置为{mpmath.mp.dps}")
-
-    async def initialize(self):
-        logger.info("Mathitools 插件已加载")
-
-    def _safe_eval_expr(self, expr: str) -> mpmath.mpf:
-        """
-        安全地解析并计算数学表达式，使用 mpmath 支持高精度
-        """
-        # 预处理：替换 ^ 为 **
-        expr = expr.replace('^', '**')
-    
-        # 创建 asteval 解释器
-        aeval = Interpreter()
-    
-        # 清空默认的命名空间，仅允许显式添加的内容
-        aeval.symtable.clear()
-    
-        # 注入 mpmath 高精度常量和函数
-        aeval.symtable['pi'] = mpmath.pi
-        aeval.symtable['e'] = mpmath.e
-        aeval.symtable['sqrt'] = mpmath.sqrt
-        aeval.symtable['cbrt'] = mpmath.cbrt
-        aeval.symtable['pow'] = mpmath.power
-        aeval.symtable['ln'] = mpmath.ln
-        aeval.symtable['sin'] = mpmath.sin
-        aeval.symtable['cos'] = mpmath.cos
-        aeval.symtable['tan'] = mpmath.tan
-        aeval.symtable['deg'] = lambda x: mpmath.mpf(x) * mpmath.pi / 180
-    
-        # 定义 root 函数：root(x, n) 表示 x 的 n 次方根
-        def root(x, n):
-            return mpmath.power(x, mpmath.mpf(1)/n)
-    
-        # 定义 logx 函数：logx(x, y) 表示以 y 为底 x 的对数
-        def logx(x, y=10):
-            if y == 1 or y<=0:
-                raise ValueError(f"底值错误")
-            return mpmath.log(x, y)
-    
-        aeval.symtable['root'] = root
-        aeval.symtable['log'] = logx
-    
-        # 使用 asteval 解析并求值
-        try:
-            result = aeval(expr)
-            if aeval.error:
-                raise ValueError(f"asteval error: {aeval.error}")
-            if result is None:
-                raise ValueError("表达式未返回有效结果")
-            return mpmath.mpf(result)
-        except Exception as e:
-            raise ValueError(f"表达式计算失败: {str(e)}")
-
-
-    @filter.llm_tool(name="expression")
-    async def expression(self, event: AstrMessageEvent, expression: str) -> MessageEventResult:
-        '''
-        计算数学表达式，支持高精度大数与浮点运算。
-
-        当前支持的运算符及其含义：
-        - "+"  : 两数相加
-        - "-"  : 两数相减
-        - "*"  : 两数相乘
-        - "/"  : 两数相除（支持高精度小数）
-        - "**" : 幂运算（如 2**10 表示 2 的 10 次方）
-        - "^"  : 幂运算（等同于 **，更自然的输入方式）
-        - "%"  : 取模运算（求余数）
-        - "//" : 整除运算（向下取整除法的近似）
-        - "()" : 括号，用于改变运算优先级，支持嵌套
-        - "sqrt(x)" : 计算 x 的平方根
-        - "root(x, n)": 计算 x 的 n 次方根（如 root(8, 3)：计算8的3次方）
-        - "pi" : 圆周率 π（约 3.14159...）
-        - "e"  : 自然常数 e（约 2.71828...）
-        - "ln(x)" : 以 e 为底的对数（即自然对数）
-        - "log(x, y)" : 以 y 为底 x 的对数（y>0且y≠1，若y未填写则默认为10，即常用对数）
-        - "sin(x)", "cos(x)", "tan(x)" : 三角函数（输入为弧度，若需要计算角度制的三角函数，请先使用deg进行转换）
-        - "deg(x)" : 将角度 x 转换为弧度（如 deg(45)：将角度45度转换为弧度）
-
-        Args:
-            expression(string): 数学表达式字符串
-        '''
-        try:
-            result = self._safe_eval_expr(expression.strip())
-            return mpmath.nstr(result, n=mpmath.mp.dps, strip_zeros=True)
-        except Exception as e:
-            return f"计算出错：{str(e)}"
-
-    @filter.llm_tool(name="compare")
-    async def compare(self, event: AstrMessageEvent, expression1: str, expression2: str) -> MessageEventResult:
-        '''
-        比较两个数学表达式的大小，支持高精度数值比较。
-
-        将分别计算 expression1 和 expression2 的值，并返回它们的大小关系。
-        支持所有 expression 工具中的运算符和函数。
-
-        Args:
-            expression1(string): 第一个数学表达式
-            expression2(string): 第二个数学表达式
-        '''
-        try:
-            val1 = self._safe_eval_expr(expression1.strip())
-            val2 = self._safe_eval_expr(expression2.strip())
-
-            if val1 < val2:
-                return f"expression1({val1}) 小于 expression2({val2})"
-            elif val1 > val2:
-                return f"expression1({val1}) 大于 expression2({val2})"
-            else:
-                return f"expression1({val1}) 等于 expression2({val2})"
-        except Exception as e:
-            return f"比较出错：{str(e)}"
+        self._dps = _sanitize_dps(config)
+        self._tools = [
+            MathEvalTool(default_dps=self._dps),
+            MathCompareTool(default_dps=self._dps),
+            MathBatchTool(default_dps=self._dps),
+            MathFunctionsTool(),
+            MathStatisticsTool(),
+            MathMatrixTool(),
+            MathUnitsTool(),
+            MathNaturalLanguageUnitsTool(),
+            MathNumberTheoryTool(),
+            MathFinanceTool(),
+        ]
+        context.add_llm_tools(*self._tools)
