@@ -5,12 +5,12 @@ from typing import Any, Callable
 
 from astrbot.api import FunctionTool, logger
 
-from core.errors import MathError
-from core.evaluator import evaluate
-from core.finance import finance_operation
-from core.matrix import matrix_operation
-from core.number_theory import number_theory_operation
-from core.registry import (
+from .core.errors import MathError
+from .core.evaluator import evaluate
+from .core.finance import finance_operation
+from .core.matrix import matrix_operation
+from .core.number_theory import number_theory_operation
+from .core.registry import (
     ALL_FUNCTION_NAMES,
     CONSTANT_NAMES,
     FINANCE_OPERATIONS,
@@ -21,10 +21,10 @@ from core.registry import (
     UNIT_ALIASES,
     UNIT_CONVERSIONS,
 )
-from core.statistics import calculate_statistics
-from core.units import convert_natural_language, convert_unit
-from result import error_result, ok_result
-from schema import (
+from .core.statistics import calculate_statistics
+from .core.units import convert_natural_language, convert_unit
+from .result import error_result, ok_result
+from .schema import (
     array_parameter,
     boolean_parameter,
     integer_parameter,
@@ -127,8 +127,11 @@ class MathEvalTool(FunctionTool):
     default_dps: int = DEFAULT_DPS
 
     async def call(self, context: Any, **kwargs: Any) -> str:
-        expression = _require_str(kwargs, "expression", 'expression="sqrt(2)"')
-        return _run("math_eval", lambda: evaluate(expression, dps=_dps(kwargs, self.default_dps)))
+        def work() -> Any:
+            expression = _require_str(kwargs, "expression", 'expression="sqrt(2)"')
+            return evaluate(expression, dps=_dps(kwargs, self.default_dps))
+
+        return _run("math_eval", work)
 
 
 @dataclass

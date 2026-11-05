@@ -2,8 +2,8 @@
 
 import unittest
 
-from core.errors import MathError
-from core.units import convert_natural_language, convert_unit
+from astrbot_plugin_mathitools.core.errors import MathError
+from astrbot_plugin_mathitools.core.units import convert_natural_language, convert_unit
 
 
 class ConvertUnitTest(unittest.TestCase):

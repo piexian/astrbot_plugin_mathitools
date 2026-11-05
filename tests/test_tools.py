@@ -44,7 +44,7 @@ _stub_astrbot.api = _stub_api
 sys.modules.setdefault("astrbot", _stub_astrbot)
 sys.modules.setdefault("astrbot.api", _stub_api)
 
-from math_tools import (  # noqa: E402
+from astrbot_plugin_mathitools.math_tools import (  # noqa: E402
     MathBatchTool,
     MathCompareTool,
     MathEvalTool,

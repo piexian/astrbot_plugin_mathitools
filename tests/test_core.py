@@ -7,10 +7,10 @@ from pathlib import Path
 from unittest import mock
 from mpmath import mp
 
-from core import MathError, evaluator, evaluate
-from core import registry
-from core.evaluator import build_symbol_table
-from core.security import validate
+from astrbot_plugin_mathitools.core import MathError, evaluator, evaluate
+from astrbot_plugin_mathitools.core import registry
+from astrbot_plugin_mathitools.core.evaluator import build_symbol_table
+from astrbot_plugin_mathitools.core.security import validate
 
 CORE_DIR = Path(__file__).resolve().parent.parent / "core"
 

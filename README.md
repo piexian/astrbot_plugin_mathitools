@@ -51,7 +51,7 @@ tests/           # 离线单元测试
 ## 二次开发
 
 - 环境：Python 3.12（CI）/ 3.13（本地），安装 requirements.txt
-- 测试：`python -B -m unittest discover -s tests -v`
+- 测试：`python -B -m unittest discover -s tests -t . -v`
 - 新增函数/常量：改 `core/registry.py`，并补 `core/evaluator.py` 符号表与 `math_functions` 输出
 - 新增工具：改根目录 `math_tools.py`，在 `main.py` 注册，schema 显式 required
 - 错误契约：JSON 字符串，ok/error_code/hint/example/valid_options；失败用 `from astrbot.api import logger` 的 `logger.error`
@@ -60,7 +60,7 @@ tests/           # 离线单元测试
 
 ## 开发验证
 
-`python -B -m unittest discover -s tests -v`
+`python -B -m unittest discover -s tests -t . -v`
 
 离线测试使用最小 AstrBot 桩，不替代真实实例加载。
 

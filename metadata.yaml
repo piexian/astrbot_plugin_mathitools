@@ -3,6 +3,6 @@ display_name: 数学工具集
 desc: "AstrBot 4.29.1+ 的数学 FunctionTool 集合"
 help: Null
 version: v3.0.0
-author: piexian
+author: NekoiMeiov_Team & piexian
 repo: https://github.com/piexian/astrbot_plugin_mathitools
 astrbot_version: ">=4.29.1,<5"

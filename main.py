@@ -3,7 +3,7 @@
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.star import Context, Star
 
-from math_tools import (
+from .math_tools import (
     MathBatchTool,
     MathCompareTool,
     MathEvalTool,

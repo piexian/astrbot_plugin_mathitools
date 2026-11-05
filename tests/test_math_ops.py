@@ -2,11 +2,11 @@
 
 import unittest
 
-from core.errors import MathError
-from core.finance import finance_operation
-from core.matrix import matrix_operation
-from core.number_theory import number_theory_operation
-from core.statistics import calculate_statistics
+from astrbot_plugin_mathitools.core.errors import MathError
+from astrbot_plugin_mathitools.core.finance import finance_operation
+from astrbot_plugin_mathitools.core.matrix import matrix_operation
+from astrbot_plugin_mathitools.core.number_theory import number_theory_operation
+from astrbot_plugin_mathitools.core.statistics import calculate_statistics
 
 
 class StatisticsTest(unittest.TestCase):
