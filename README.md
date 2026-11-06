@@ -46,12 +46,12 @@
 ## 安全说明
 
 表达式使用 AST 白名单求值，限制长度、嵌套、指数、超时与结果大小；表达式不能访问网络、文件或启动子进程。
-math_numerical 工具为计算启动受限工作进程：墙钟 15 秒、最多 2 并发、Linux 下 256MiB 内存与 10 秒 CPU 限额，积分总求值限 2048 次，取消和超时后即时回收。
+math_numerical 工具为计算启动受限工作进程：墙钟 15 秒、最多 2 并发，积分总求值限 2048 次，取消和超时后即时回收。生产限额 Linux 为 256MiB 地址空间与 10 秒 CPU，Windows 为 256MiB 提交内存与 10 秒用户态 CPU。
 聚合与舍入函数 sum/prod/min/max/round 与 Python 3.12 语义一致，round 为半偶数舍入，ndigits 取 -10000..10000；列表按嵌套元素总数限 10000，prod 中间值与整数输出限 10000 位，总输出最多 10000 字符。
 
 ## Benchmark
 
-[benchmark.yml](.github/workflows/benchmark.yml) 在 Ubuntu/Windows/macOS 原生运行预检：记录内存基线，验证 CPU/内存限额，并真实加载 AstrBot、注册 11 个数学工具并执行 5 次冒烟调用，报告见 CI artifacts。本轮仅预检记录，不改变生产限额。
+[benchmark.yml](.github/workflows/benchmark.yml) 在 Ubuntu/Windows/macOS 原生运行预检：记录内存基线，验证 CPU/内存限额，并真实加载 AstrBot、注册 11 个数学工具并执行 9 次冒烟调用，报告见 CI artifacts。Windows 探针复用同一生产资源限额模块。
 
 ## 项目结构
 ```text
@@ -59,6 +59,7 @@ astrbot_plugin_mathitools/
 ├── core/                      # 计算层
 │   ├── __init__.py
 │   ├── _numerical_worker.py    # 受限工作进程
+│   ├── _resource_limits.py     # Windows 原生资源限额
 │   ├── errors.py               # 错误契约
 │   ├── evaluator.py            # 表达式求值
 │   ├── finance.py              # 金融计算

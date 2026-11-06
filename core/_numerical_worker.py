@@ -8,6 +8,7 @@ from pathlib import Path
 def main() -> None:
     emergency_memory = bytearray(1024 * 1024)
     try:
+        worker_dir = Path(__file__).resolve().parent
         if sys.platform == "linux":
             import resource
 
@@ -15,7 +16,18 @@ def main() -> None:
             resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
             resource.setrlimit(resource.RLIMIT_CPU, (10, 11))
             resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        elif sys.platform == "win32":
+            sys.path.insert(0, str(worker_dir))
+            try:
+                from _resource_limits import set_windows_limits
+
+                set_windows_limits(
+                    process_memory=256 * 1024 * 1024,
+                    job_time_ticks=10 * 10_000_000,
+                )
+            finally:
+                sys.path.remove(str(worker_dir))
+        sys.path.insert(0, str(worker_dir.parent))
         from core.numerical import _calculate
 
         packet = json.loads(sys.stdin.readline())

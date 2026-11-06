@@ -253,7 +253,7 @@ def run_sdk_probe(repo: Path, log_dir: Path) -> dict:
                 and report.get("passed") is True
                 and report.get("dependency_versions", {}).get("astrbot") == "4.29.1"
                 and report.get("worker_residue_pids") == []
-                and len(cases) == 5
+                and len(cases) == 9
                 and all(item.get("passed") is True for item in cases)
                 and sorted(report.get("registered_tools", []))
                 == sorted(EXPECTED_SDK_TOOLS)

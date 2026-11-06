@@ -25,6 +25,99 @@ TOOL_FILES = [
 ]
 
 
+async def observe_worker_cpu(min_user_seconds: float, deadline_seconds: float):
+    """观察本进程后代中的 _numerical_worker，等其用户态 CPU 达到阈值。"""
+    import psutil
+
+    observed = []
+    started = time.perf_counter()
+    while time.perf_counter() - started < deadline_seconds:
+        for child in psutil.Process().children(recursive=True):
+            cmdline = child.cmdline()
+            if cmdline and cmdline[-1].endswith("_numerical_worker.py"):
+                if child.pid not in {item.pid for item in observed}:
+                    observed.append(child)
+        for worker in observed:
+            try:
+                if worker.cpu_times().user >= min_user_seconds:
+                    return observed
+            except psutil.NoSuchProcess:
+                pass
+        await asyncio.sleep(0.05)
+    return observed
+
+
+async def run_cancellation_case(invoke) -> dict:
+    """取消重计算并验证本 case 启动的工作进程被回收。"""
+    import psutil
+
+    started = time.perf_counter()
+    observed = []
+    create_times = {}
+    cancelled = False
+    remaining = []
+    task = asyncio.create_task(invoke(
+        "math_numerical",
+        {
+            "operation": "differentiate",
+            "expression": "comb(1000000000,500000000)+x",
+            "x": 0,
+        },
+    ))
+
+    async def ensure_task_cancelled():
+        nonlocal cancelled
+        if task.done():
+            return
+        task.cancel()
+        try:
+            await asyncio.wait_for(asyncio.shield(task), 5)
+        except asyncio.CancelledError:
+            cancelled = True
+
+    async def wait_workers_exit(workers, timeout_seconds):
+        deadline = time.perf_counter() + timeout_seconds
+        while time.perf_counter() < deadline:
+            if not any(worker.is_running() for worker in workers):
+                return
+            await asyncio.sleep(0.05)
+
+    try:
+        observed = await observe_worker_cpu(1.0, 8.0)
+        for worker in observed:
+            create_times[worker.pid] = worker.create_time()
+        await ensure_task_cancelled()
+        workers = list(observed)
+        await wait_workers_exit(workers, 5)
+        for worker in workers:
+            try:
+                if (
+                    worker.create_time() == create_times[worker.pid]
+                    and worker.is_running()
+                ):
+                    worker.kill()
+                    await wait_workers_exit([worker], 2)
+                    if worker.is_running():
+                        remaining.append(worker.pid)
+            except psutil.NoSuchProcess:
+                pass
+    finally:
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+    return {
+        "tool": "math_numerical",
+        "params": {"operation": "differentiate-cancellation"},
+        "actual": None,
+        "observed_worker_pids": [item.pid for item in observed],
+        "observed_worker_create_times": create_times,
+        "cancelled": cancelled,
+        "remaining_worker_pids": remaining,
+        "elapsed_seconds": round(time.perf_counter() - started, 6),
+        "passed": bool(observed) and cancelled and not remaining,
+    }
+
+
 def prepare_root(repo: Path, work_root: Path) -> tuple[Path, dict[str, str]]:
     work_root.mkdir(parents=True, exist_ok=True)
     root = Path(tempfile.mkdtemp(prefix="probe_", dir=work_root))
@@ -163,6 +256,16 @@ async def run_probe(args: argparse.Namespace) -> dict:
                 lambda p: not p.get("ok") and p.get("error_code") == "invalid_argument",
             ),
             (
+                "math_numerical",
+                {"operation": "findroot", "expression": "sqrt(x)", "a": -2, "b": -1},
+                lambda p: not p.get("ok") and p.get("error_code") == "domain_error",
+            ),
+            (
+                "math_numerical",
+                {"operation": "normal_cdf", "x": 0},
+                lambda p: p.get("ok") and p.get("result") == "0.5",
+            ),
+            (
                 "math_eval", {"expression": "2+3"},
                 lambda p: p.get("ok") and p.get("result") == "5",
             ),
@@ -180,6 +283,17 @@ async def run_probe(args: argparse.Namespace) -> dict:
                 "passed": bool(check(payload)),
             })
 
+
+        cancellation = await run_cancellation_case(invoke)
+        results.append(cancellation)
+        recovery = await invoke("math_numerical", {"operation": "normal_cdf", "x": 0})
+        results.append({
+            "tool": "math_numerical",
+            "params": {"operation": "normal_cdf", "x": 0},
+            "actual": recovery,
+            "elapsed_seconds": None,
+            "passed": bool(recovery.get("ok") and recovery.get("result") == "0.5"),
+        })
         import psutil
 
         worker_pids = []
