@@ -49,6 +49,10 @@
 math_numerical 工具为计算启动受限工作进程：墙钟 15 秒、最多 2 并发、Linux 下 256MiB 内存与 10 秒 CPU 限额，积分总求值限 2048 次，取消和超时后即时回收。
 聚合与舍入函数 sum/prod/min/max/round 与 Python 3.12 语义一致，round 为半偶数舍入，ndigits 取 -10000..10000；列表按嵌套元素总数限 10000，prod 中间值与整数输出限 10000 位，总输出最多 10000 字符。
 
+## Benchmark
+
+[benchmark.yml](.github/workflows/benchmark.yml) 在 Ubuntu/Windows/macOS 原生运行预检：记录内存基线，验证 CPU/内存限额，并真实加载 AstrBot、注册 11 个数学工具并执行 5 次冒烟调用，报告见 CI artifacts。本轮仅预检记录，不改变生产限额。
+
 ## 项目结构
 ```text
 astrbot_plugin_mathitools/
@@ -75,9 +79,14 @@ astrbot_plugin_mathitools/
 │   ├── test_probability.py
 │   ├── test_tools.py
 │   └── test_units.py
+├── benchmarks/                 # 三平台原生预检
+│   ├── run.py                  # 父调度汇总
+│   ├── native_probe.py         # 内存/CPU 限额探针
+│   └── astrbot_probe.py        # 真实 SDK 工具调用
 ├── .github/
 │   └── workflows/
 │       ├── codeql.yml           # 安全扫描
+│       ├── benchmark.yml       # 三平台原生预检
 │       └── tests.yml            # 单元测试
 ├── main.py                    # 插件入口
 ├── math_tools.py              # FunctionTool 接口
