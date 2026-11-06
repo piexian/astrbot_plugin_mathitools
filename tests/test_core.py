@@ -1,6 +1,7 @@
 """core 求值、复数、精度隔离、函数全集与安全限制测试。"""
 
 import ast
+import sys
 import time
 import unittest
 from pathlib import Path
@@ -23,10 +24,10 @@ def expect_error(testcase, expression, error_code):
 
 class RegistryTest(unittest.TestCase):
     def test_function_counts(self):
-        self.assertEqual(len(registry.MATH_FUNCTIONS), 53)
+        self.assertEqual(len(registry.MATH_FUNCTIONS), 58)
         self.assertEqual(len(registry.STATISTICS_FUNCTIONS), 10)
         self.assertEqual(len(registry.COMPLEX_FUNCTIONS), 10)
-        self.assertEqual(len(registry.ALL_FUNCTION_NAMES), 73)
+        self.assertEqual(len(registry.ALL_FUNCTION_NAMES), 78)
 
     def test_constants(self):
         self.assertEqual(len(registry.CONSTANT_NAMES), 7)
@@ -68,6 +69,68 @@ class EvaluateTest(unittest.TestCase):
         self.assertEqual(evaluate("abs(-5)"), "5")
         self.assertEqual(evaluate("trunc(-2.7)"), "-2")
         self.assertEqual(evaluate("exp2(10)"), "1024")
+
+    def test_sum_prod(self):
+        self.assertEqual(evaluate("sum([1, 2, 3])"), "6")
+        self.assertEqual(evaluate("sum([])"), "0")
+        self.assertEqual(evaluate("sum([1, 2], 10)"), "13")
+        self.assertEqual(evaluate("prod([2, 3, 4])"), "24")
+        self.assertEqual(evaluate("prod([])"), "1")
+        self.assertEqual(evaluate("prod([2, 3], start=5)"), "30")
+        self.assertEqual(evaluate("prod([1, True, 1], start=[2, 3])"), "[2, 3]")
+        self.assertEqual(evaluate("prod([1], start=True)"), "1")
+        expect_error(self, "prod([1.0], start=[1])", "invalid_argument")
+        self.assertEqual(evaluate("sum([[1], [2]], start=[])"), "[1, 2]")
+        self.assertEqual(evaluate("prod([2, 3], start=[1])"), "[1, 1, 1, 1, 1, 1]")
+        self.assertEqual(evaluate("min([[2, 1], [3]], key=prod)"), "[2, 1]")
+
+    def test_min_max(self):
+        self.assertEqual(evaluate("min([3, 1, 2])"), "1")
+        self.assertEqual(evaluate("max(3, 1, 2)"), "3")
+        self.assertEqual(evaluate("min([], default=7)"), "7")
+        self.assertEqual(evaluate("max([], default=7)"), "7")
+
+    def test_round_and_aggregate_errors(self):
+        self.assertEqual(evaluate("round(2.5)"), "2")
+        self.assertEqual(evaluate("round(3.5)"), "4")
+        self.assertEqual(evaluate("round(1234, -2)"), "1200")
+        expect_error(self, "min([])", "domain_error")
+        expect_error(self, "sum(1)", "invalid_argument")
+
+    def test_sum_native_compensation(self):
+        # Python 3.12 原生补偿求和；自定义累加会得到 0
+        self.assertEqual(float(evaluate("sum([1e16, 1.0, -1e16])")), 1.0)
+
+    def test_aggregate_signature(self):
+        for expr in ("sum(iterable=[1])", "prod(iterable=[1])", "prod([1], 2)"):
+            with self.subTest(expr=expr):
+                expect_error(self, expr, "invalid_argument")
+
+    def test_element_count_limit(self):
+        self.assertEqual(evaluate("sum([1] * 10000)"), "10000")
+        expect_error(self, "sum([1] * 10001)", "invalid_argument")
+        # 嵌套按元素总数计，容器自身也算一个元素
+        self.assertEqual(evaluate("sum(max([[1] * 9999], key=mean))"), "9999")
+        expect_error(self, "sum(max([[1] * 10000], key=mean))", "invalid_argument")
+
+    def test_result_size_limit(self):
+        before = sys.get_int_max_str_digits()
+        self.assertEqual(len(evaluate("10^5000")), 5001)
+        self.assertEqual(sys.get_int_max_str_digits(), before)
+        expect_error(self, "10^10000", "result_too_large")
+        expect_error(self, "-10^9999", "result_too_large")
+        # 中间乘积超限立即报错，不等到乘 0
+        expect_error(self, "prod([10^5000, 10^5000, 0])", "result_too_large")
+
+    def test_round_ndigits_limit(self):
+        self.assertEqual(evaluate("round(125, 10000)"), "125")
+        self.assertEqual(evaluate("round(125, -10000)"), "0")
+        for expr in (
+            "round(125, 10001)", "round(125, -10001)",
+            "round(2.5, 1.5)", "round(1+1j)",
+        ):
+            with self.subTest(expr=expr):
+                expect_error(self, expr, "invalid_argument")
 
     def test_list_and_tuple_results(self):
         self.assertEqual(evaluate("mean([1, 2, 3])"), "2")
@@ -149,7 +212,7 @@ class ErrorMappingTest(unittest.TestCase):
 
     def test_unknown_function(self):
         expect_error(self, "foo(1)", "unknown_function")
-        expect_error(self, "sum([1,2])", "unknown_function")
+        expect_error(self, "nonexistent([1,2])", "unknown_function")
 
     def test_exponent_too_large(self):
         expect_error(self, "2**10001", "exponent_too_large")
@@ -202,7 +265,9 @@ class FullFunctionSetTest(unittest.TestCase):
         "perm": "5, 2", "erf": "0", "erfc": "0", "gamma": "5", "lgamma": "5",
         "cbrt": "8", "exp2": "10", "expm1": "0", "log1p": "0",
         "nextafter": "1, 2", "ulp": "1",
-        "mean": "[1, 2, 3]", "median": "[1, 2, 3]", "mode": "[1, 2, 2]",
+        "sum": "[1, 2, 3]", "prod": "[2, 3, 4]", "min": "3, 1, 2",
+        "max": "[3, 1, 2]", "round": "2.5",
+        "mean": "[1, 2, 3]", "median": "[1, 2, 3]", "mode": "[1, 1, 2]",
         "stdev": "[1, 2, 3]", "pstdev": "[1, 2, 3]", "variance": "[1, 2, 3]",
         "pvariance": "[1, 2, 3]", "harmonic_mean": "[1, 2, 4]",
         "geometric_mean": "[1, 4]", "quantiles": "[1, 2, 3, 4]",

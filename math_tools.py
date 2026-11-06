@@ -114,7 +114,7 @@ def _as_comparable(text: str, label: str) -> float:
 @dataclass
 class MathEvalTool(FunctionTool):
     name: str = "math_eval"
-    description: str = "求值数学表达式；支持 73 个函数、7 个常量、列表与复数输出，^ 按乘方处理"
+    description: str = "求值数学表达式；支持 78 个函数、7 个常量、列表与复数输出，^ 按乘方处理"
     parameters: dict = field(
         default_factory=lambda: object_parameters(
             {

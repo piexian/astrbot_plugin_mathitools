@@ -162,7 +162,7 @@ class ToolBehaviorTest(unittest.TestCase):
         payload = _call(MathFunctionsTool())
         self.assertTrue(payload["ok"])
         result = payload["result"]
-        self.assertEqual(len(result["functions"]), 73)
+        self.assertEqual(len(result["functions"]), 78)
         self.assertEqual(len(result["constants"]), 7)
         self.assertEqual(len(result["unit_categories"]), 15)
         self.assertEqual(sum(len(units) for units in result["unit_categories"].values()), 158)

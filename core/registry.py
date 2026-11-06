@@ -1,4 +1,4 @@
-"""静态注册表：73 函数名、7 常量名、15 类单位、153 别名、运算符与禁用模式。
+"""静态注册表：78 函数名、7 常量名、15 类单位、153 别名、运算符与禁用模式。
 
 数据转录自上游 registry.json，是本插件全部函数/单位清单的唯一来源。
 """
@@ -17,6 +17,7 @@ MATH_FUNCTIONS: tuple[str, ...] = (
     "isfinite", "isinf", "isnan", "isclose",
     "comb", "perm", "erf", "erfc", "gamma", "lgamma",
     "cbrt", "exp2", "expm1", "log1p", "nextafter", "ulp",
+    "sum", "prod", "min", "max", "round",
 )
 
 STATISTICS_FUNCTIONS: tuple[str, ...] = (
@@ -33,7 +34,7 @@ ALL_FUNCTION_NAMES: tuple[str, ...] = (
     MATH_FUNCTIONS + STATISTICS_FUNCTIONS + COMPLEX_FUNCTIONS
 )
 
-# root 不在 73 函数清单内，为满足约束卡示例 root(-8,3) 额外注入 mpmath.root。
+# root 不在 78 函数清单内，为满足约束卡示例 root(-8,3) 额外注入 mpmath.root。
 EXTRA_FUNCTION_NAMES: tuple[str, ...] = ("root",)
 
 CONSTANT_NAMES: tuple[str, ...] = ("pi", "e", "tau", "inf", "nan", "phi", "euler")
