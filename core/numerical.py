@@ -22,7 +22,8 @@ from .evaluator import (
     build_symbol_table,
     format_result,
 )
-from .registry import NUMERICAL_OPERATIONS
+from .probability import calculate_probability, validate_probability_params
+from .registry import NUMERICAL_OPERATIONS, PROBABILITY_OPERATIONS
 from .security import validate
 from .statistics import valid_number
 
@@ -104,6 +105,8 @@ def _validate_request(operation, dps, params) -> dict:
         _validate_findroot_params(params, packet)
     elif operation == "polyroots":
         _validate_polyroots_params(params, packet)
+    elif operation in PROBABILITY_OPERATIONS:
+        validate_probability_params(params, packet)
     else:
         _validate_calculus_params(params, packet)
     return packet
@@ -456,6 +459,8 @@ def _polyroots(packet) -> list[str]:
 
 def _calculate(packet):
     """按 packet 分派到对应同步算法。"""
+    if packet["operation"] in PROBABILITY_OPERATIONS:
+        return calculate_probability(packet)
     if packet["operation"] == "findroot":
         return _findroot(packet)
     if packet["operation"] == "polyroots":

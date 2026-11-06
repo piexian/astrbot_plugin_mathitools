@@ -73,9 +73,15 @@ STATISTICS_OPERATIONS: tuple[str, ...] = STATISTICS_FUNCTIONS + (
     "weighted_mean", "percentile", "covariance", "correlation", "linear_regression",
 )
 
+PROBABILITY_OPERATIONS: tuple[str, ...] = (
+    "normal_pdf", "normal_cdf", "normal_ppf",
+    "binomial_pmf", "binomial_cdf", "binomial_ppf",
+    "poisson_pmf", "poisson_cdf", "poisson_ppf",
+)
+
 NUMERICAL_OPERATIONS: tuple[str, ...] = (
     "findroot", "polyroots", "differentiate", "integrate",
-)
+) + PROBABILITY_OPERATIONS
 
 MATRIX_OPERATIONS: tuple[str, ...] = (
     "multiply", "determinant", "inverse", "transpose", "rank",

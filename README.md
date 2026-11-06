@@ -1,6 +1,6 @@
 # 数学工具集
 
-基于 [NekoiMeiov/astrbot_plugin_mathitools](https://github.com/NekoiMeiov/astrbot_plugin_mathitools) 二次开发，为 AstrBot 提供表达式求值、单位换算、统计、矩阵、数值求根与微积分、数论与金融计算工具。
+基于 [NekoiMeiov/astrbot_plugin_mathitools](https://github.com/NekoiMeiov/astrbot_plugin_mathitools) 二次开发，为 AstrBot 提供表达式求值、单位换算、统计、矩阵、数值求根与微积分、概率分布、数论与金融计算工具。
 
 > [!NOTE]
 > 运行要求：AstrBot >=4.29.1,<5。
@@ -25,7 +25,7 @@
 | math_nl_units | 自然语言单位换算，如 "5 km to miles" |
 | math_number_theory | 数论运算（is_prime/prime_factors/divisors/totient） |
 | math_finance | 金融计算（百分比/小费/利息/贷款/分摊/税费等 8 种） |
-| math_numerical | 数值求根/微分/定积分（findroot 二分 / polyroots / differentiate / integrate） |
+| math_numerical | 数值求根/微分/定积分/概率分布（findroot / polyroots / differentiate / integrate / normal_* / binomial_* / poisson_*，13 项运算） |
 
 统计扩展：weighted_mean 通过 weights 传入权重（同长、可为负但和非零）；covariance、correlation、linear_regression 通过 data2 传入第二组数据，data 为 x、data2 为 y。covariance 为样本协方差（n-1），correlation 为 Pearson 相关，linear_regression 返回 slope/intercept。percentile 的 p 取 0..100（含端点）线性插值。每组数据/权重至多 10000 个有限数。
 
@@ -34,6 +34,8 @@
 数值求根：findroot 传 expression/a/b，固定自变量 x，在连续区间二分，端点异号或端点为根；polyroots 传降幂系数（最多 20 次），结果为字符串/字符串数组。dps 取 1..200。重根或病态问题可报 no_convergence。如 operation='findroot', expression='x^2-2', a=1, b=2。
 
 微分与定积分：differentiate 传 expression/x/n（n 默认 1，上限 5）；integrate 传 expression/a/b，允许反向与等端点，points 最多 32 个严格递增的内部拆分点。被积函数需有限连续且足够光滑，已知窄峰/折点用 points 拆分，求值次数用尽或精度不足报 no_convergence。dps 取 1..200，结果以字符串返回。
+
+概率分布：normal_pdf/cdf/ppf 传 x 或 q，mu/sigma 默认 0/1 且 sigma>0；binomial_pmf/cdf/ppf 传 n/p 与 k 或 q；poisson_pmf/cdf/ppf 传 rate 与 k 或 q。n 与 rate 上限 10000，|k| 至多 100000，p/q 取 0..1。离散 ppf 为 CDF>=q 的最小非负整数且 q=0 返回 0；正态 q=0/1 与非退化泊松 q=1 报 domain_error。结果以字符串返回，dps 取 1..200。
 
 ## 配置说明
 
@@ -58,7 +60,8 @@ astrbot_plugin_mathitools/
 │   ├── finance.py              # 金融计算
 │   ├── matrix.py               # 矩阵运算
 │   ├── number_theory.py        # 数论
-│   ├── numerical.py            # 求根与微积分
+│   ├── numerical.py            # 求根、微积分与概率分布
+│   ├── probability.py          # 概率分布
 │   ├── registry.py             # 函数与运算清单
 │   ├── security.py             # AST 安全校验
 │   ├── statistics.py           # 统计
@@ -69,6 +72,7 @@ astrbot_plugin_mathitools/
 │   ├── test_logger_import.py
 │   ├── test_math_ops.py
 │   ├── test_numerical.py
+│   ├── test_probability.py
 │   ├── test_tools.py
 │   └── test_units.py
 ├── .github/

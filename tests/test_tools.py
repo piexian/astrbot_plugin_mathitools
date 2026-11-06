@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import math
 import sys
 import types
 import unittest
@@ -76,6 +77,13 @@ EXPECTED_REQUIRED = {
     "math_finance": ["operation"],
 }
 
+
+EXPECTED_NUMERICAL_OPERATIONS = [
+    "findroot", "polyroots", "differentiate", "integrate",
+    "normal_pdf", "normal_cdf", "normal_ppf",
+    "binomial_pmf", "binomial_cdf", "binomial_ppf",
+    "poisson_pmf", "poisson_cdf", "poisson_ppf",
+]
 FORBIDDEN_SCHEMA_KEYS = {"default", "oneOf", "allOf", "anyOf", "additionalProperties"}
 
 
@@ -122,7 +130,10 @@ class ToolSchemaTest(unittest.TestCase):
     def test_math_numerical_schema_optional_params(self):
         tool = MathNumericalTool()
         self.assertEqual(tool.parameters["required"], ["operation"])
-        for key in ("expression", "a", "b", "coefficients", "dps", "x", "n", "points"):
+        for key in (
+            "expression", "a", "b", "coefficients", "dps", "x", "n", "points",
+            "mu", "sigma", "p", "rate", "k", "q",
+        ):
             self.assertIn(key, tool.parameters["properties"])
         self.assertNotIn("timeout_seconds", tool.parameters["properties"])
 
@@ -272,8 +283,7 @@ class ToolBehaviorTest(unittest.TestCase):
         ):
             self.assertIn(name, payload["result"]["statistics_operations"])
         self.assertEqual(
-            payload["result"]["numerical_operations"],
-            ["findroot", "polyroots", "differentiate", "integrate"],
+            payload["result"]["numerical_operations"], EXPECTED_NUMERICAL_OPERATIONS
         )
 
     def test_math_matrix_dimension_error(self):
@@ -349,8 +359,7 @@ class ToolBehaviorTest(unittest.TestCase):
         payload = _call(MathNumericalTool(), operation="zz")
         self.assertEqual(payload["error_code"], "unknown_operation")
         self.assertEqual(
-            payload["valid_options"],
-            ["findroot", "polyroots", "differentiate", "integrate"],
+            payload["valid_options"], EXPECTED_NUMERICAL_OPERATIONS
         )
         payload = _call(MathNumericalTool(), operation="differentiate", expression="x")
         self.assertEqual(payload["error_code"], "invalid_argument")
@@ -367,6 +376,35 @@ class ToolBehaviorTest(unittest.TestCase):
             expression="exp(-10^8*(x-0.3)^2)", a=0, b=1, points=[0.3],
         )
         self.assertEqual(payload["error_code"], "no_convergence")
+        payload = _call(MathNumericalTool(), operation="normal_pdf", mu=0, sigma=0, x=1)
+        self.assertEqual(payload["error_code"], "invalid_argument")
+        payload = _call(MathNumericalTool(), operation="binomial_pmf", n=10001, p=0.5, k=1)
+        self.assertEqual(payload["error_code"], "invalid_argument")
+        payload = _call(MathNumericalTool(), operation="poisson_cdf", rate=10001, k=1)
+        self.assertEqual(payload["error_code"], "invalid_argument")
+        payload = _call(MathNumericalTool(), operation="normal_ppf", q=0.0)
+        self.assertEqual(payload["error_code"], "domain_error")
+        payload = _call(MathNumericalTool(), operation="poisson_ppf", rate=1, q=1.0)
+        self.assertEqual(payload["error_code"], "domain_error")
+
+    def test_math_numerical_probability_ok(self):
+        cases = [
+            ("normal_pdf", dict(x=0), 1 / math.sqrt(2 * math.pi)),
+            ("normal_cdf", dict(x=0), 0.5),
+            ("normal_ppf", dict(q=0.5), 0.0),
+            ("binomial_pmf", dict(n=10, p=0.5, k=5), 0.24609375),
+            ("binomial_cdf", dict(n=10, p=0.5, k=4), 0.376953125),
+            ("binomial_ppf", dict(n=10, p=0.5, q=0.5), 5.0),
+            ("poisson_pmf", dict(rate=3, k=0), math.exp(-3)),
+            ("poisson_cdf", dict(rate=3, k=2), 8.5 * math.exp(-3)),
+            ("poisson_ppf", dict(rate=3, q=0.5), 3.0),
+        ]
+        for operation, params, expected in cases:
+            with self.subTest(operation=operation, **params):
+                payload = _call(MathNumericalTool(), operation=operation, **params)
+                self.assertTrue(payload["ok"])
+                self.assertIsInstance(payload["result"], str)
+                self.assertAlmostEqual(float(payload["result"]), expected, places=12)
 
     def test_math_numerical_default_dps_applied(self):
         tool = MathNumericalTool(default_dps=80)

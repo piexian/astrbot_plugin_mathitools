@@ -1,7 +1,6 @@
 name: astrbot_plugin_mathitools
 display_name: 数学工具集
-desc: "为 AstrBot 提供表达式求值、单位换算、统计、矩阵、数论与金融计算"
-help: Null
+desc: "为 AstrBot 提供表达式求值、单位换算、统计、矩阵、数值求根与微积分、概率分布、数论与金融计算"
 version: v3.0.0
 author: NekoiMeiov_Team & piexian
 repo: https://github.com/piexian/astrbot_plugin_mathitools
