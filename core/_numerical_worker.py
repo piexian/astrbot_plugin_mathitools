@@ -1,4 +1,4 @@
-"""数值求根独立工作进程：限额内运行 core.numerical._calculate。"""
+"""数值运算独立工作进程：限额内运行 core.numerical._calculate。"""
 
 import json
 import sys
@@ -14,6 +14,7 @@ def main() -> None:
             limit = 256 * 1024 * 1024
             resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
             resource.setrlimit(resource.RLIMIT_CPU, (10, 11))
+            resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
         sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
         from core.numerical import _calculate
 

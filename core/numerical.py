@@ -1,4 +1,4 @@
-"""数值求根：findroot 二分与 polyroots 的同步基础。"""
+"""数值运算：求根、多项式根、微分与积分的同步基础。"""
 
 import asyncio
 import ast
@@ -25,6 +25,10 @@ from .evaluator import (
 from .registry import NUMERICAL_OPERATIONS
 from .security import validate
 from .statistics import valid_number
+
+_MAX_DIFF_ORDER = 5
+_MAX_QUAD_POINTS = 32
+_MAX_QUAD_EVALS = 2048
 
 
 def _expression_function(expression: str):
@@ -98,8 +102,10 @@ def _validate_request(operation, dps, params) -> dict:
     packet: dict = {"operation": operation, "dps": dps}
     if operation == "findroot":
         _validate_findroot_params(params, packet)
-    else:
+    elif operation == "polyroots":
         _validate_polyroots_params(params, packet)
+    else:
+        _validate_calculus_params(params, packet)
     return packet
 
 
@@ -161,6 +167,199 @@ def _validate_polyroots_params(params, packet) -> None:
     if coeffs[0] == 0:
         raise MathError("前导系数不能为 0", "invalid_argument", hint="请先去掉前导零项")
     packet["coefficients"] = list(coeffs)
+
+
+def _validate_calculus_params(params, packet) -> None:
+    """校验 differentiate/integrate 的 expression 与参数，不转 float。"""
+    expression = params.get("expression")
+    if not isinstance(expression, str) or not expression.strip():
+        raise MathError("expression 必须是非空字符串", "invalid_argument")
+    validate(expression)
+    packet["expression"] = expression
+    if packet["operation"] == "differentiate":
+        x = params.get("x")
+        if not valid_number(x):
+            raise MathError("x 必须是有限数字", "invalid_argument")
+        n = params.get("n", 1)
+        if isinstance(n, bool) or not isinstance(n, int) or not 1 <= n <= _MAX_DIFF_ORDER:
+            raise MathError(f"n 必须是 1..{_MAX_DIFF_ORDER} 的整数", "invalid_argument")
+        packet["x"] = x
+        packet["n"] = n
+        return
+    a, b = params.get("a"), params.get("b")
+    if not valid_number(a) or not valid_number(b):
+        raise MathError("a 和 b 必须是有限数字", "invalid_argument")
+    points = params.get("points", [])
+    if points is None:
+        raise MathError("points 为 None 非法", "invalid_argument", hint="省略该参数或传空列表")
+    if not isinstance(points, (list, tuple)) or len(points) > _MAX_QUAD_POINTS:
+        raise MathError(
+            f"points 必须是不超过 {_MAX_QUAD_POINTS} 项的列表或元组",
+            "invalid_argument",
+        )
+    if any(not valid_number(point) for point in points):
+        raise MathError("points 元素必须是有限数字", "invalid_argument")
+    lo, hi = min(a, b), max(a, b)
+    if a == b and len(points) > 0:
+        raise MathError("a == b 时 points 必须为空", "invalid_argument")
+    previous = None
+    for point in points:
+        if previous is not None and point <= previous:
+            raise MathError("points 必须严格递增", "invalid_argument")
+        if not lo < point < hi:
+            raise MathError("points 必须严格位于开区间内", "invalid_argument")
+        previous = point
+    packet["a"] = a
+    packet["b"] = b
+    packet["points"] = list(points)
+
+
+def _differentiate(packet) -> str:
+    """方向对称的高阶数值微分，返回格式化字符串。"""
+    dps = packet["dps"]
+    x = packet["x"]
+    n = packet["n"]
+    with mp.workdps(dps + 30):
+        point_bits = max(0, int(mp.mag(x))) if x != 0 else 0
+        with mp.extraprec(point_bits):
+            f = _expression_function(packet["expression"])
+            at_point = f(x)
+        # 2048 保护位吸收大数偏移导致的相消（如 exp(5000)+x）
+        extra = 2048 + (max(0, int(mp.mag(at_point))) if at_point != 0 else 0)
+        tol = mp.mpf(10) ** (-dps)
+        for order in range(1, n + 1):
+            left = mp.diff(f, x, order, direction=-1, addprec=extra)
+            right = mp.diff(f, x, order, direction=1, addprec=extra)
+            gap = abs(left - right)
+            if gap > tol * max(abs(left), abs(right)):
+                left = mp.diff(f, x, order, direction=-1, addprec=extra + 1)
+                right = mp.diff(f, x, order, direction=1, addprec=extra + 1)
+                if abs(left - right) >= 0.75 * gap:
+                    raise MathError(
+                        "差分对称性检查未收敛",
+                        "no_convergence",
+                        hint="函数需足够光滑，或降低阶数 n",
+                    )
+        first = mp.diff(f, x, n, addprec=extra)
+        second = mp.diff(f, x, n, addprec=extra + 32)
+        if abs(first - second) > tol * max(1, abs(first), abs(second)):
+            raise MathError(
+                "精度自检未收敛",
+                "no_convergence",
+                hint="函数需足够光滑，或降低阶数 n",
+            )
+        if not mp.isfinite(second):
+            raise MathError("导数结果非有限", "domain_error", hint="结果不能是 NaN 或 Infinity")
+        return format_result(second, dps)
+
+
+def _integrate(packet) -> str:
+    """自适应分段高斯求积，返回格式化字符串。"""
+    dps = packet["dps"]
+    a, b = packet["a"], packet["b"]
+    points = packet["points"]
+    with mp.workdps(dps + 30):
+        raw = [min(a, b), *points, max(a, b)]
+        point_bits = max([0] + [int(mp.mag(v)) for v in raw if v])
+        precision = mp.prec + point_bits
+        samples = [
+            mp.mpf(0),
+            mp.mpf(1) / 4,
+            mp.mpf(1) / 3,
+            mp.mpf(1) / 2,
+            mp.mpf(2) / 3,
+            mp.mpf(3) / 4,
+            mp.mpf(1),
+        ]
+        calls = 0
+
+        def _compile():
+            compiled = _expression_function(packet["expression"])
+
+            def f(x):
+                # 回调预算是总硬限制，超过即拒绝而非放宽
+                nonlocal calls
+                calls += 1
+                if calls > _MAX_QUAD_EVALS:
+                    raise MathError(
+                        "积分函数求值次数超过上限",
+                        "no_convergence",
+                        hint="缩小区间或在剧变处提供 points 拆分",
+                    )
+                return compiled(x)
+
+            return f
+
+        with mp.workprec(precision):
+            f = _compile()
+            coords = [mp.mpf(entry) for entry in raw]
+            sample_values = [
+                f(lo + (hi - lo) * t)
+                for lo, hi in zip(coords, coords[1:])
+                for t in samples
+            ]
+            # 尺度校准：按采样值量级补精度，保住相消小量
+            value_bits = max([0] + [int(mp.mag(v)) for v in sample_values if v])
+        with mp.workprec(precision + value_bits):
+            f = _compile()
+            sign = 1 if a <= b else -1
+            coords = [mp.mpf(entry) for entry in raw]
+            if a == b:
+                f(coords[0])
+                return format_result(mp.mpf(0), dps)
+            total = mp.mpf(0)
+            tol = mp.mpf(10) ** (-(dps + 5))
+            for lo, hi in zip(coords, coords[1:]):
+                width = hi - lo
+                section_samples = [f(lo + width * t) for t in samples]
+                sample_scale = max(abs(entry) for entry in section_samples)
+                scale = sample_scale or mp.mpf(1)
+                normalized_tol = tol * min(1, 1 / abs(width * scale))
+
+                def normalized(t, lo=lo, width=width, scale=scale):
+                    value = f(lo + width * t) / scale
+                    if abs(value) > 4:
+                        raise MathError(
+                            "采样尺度不足以覆盖函数变化",
+                            "no_convergence",
+                            hint="在窄峰或折点处提供 points 拆分",
+                        )
+                    return value
+
+                value, error = mp.quadsubdiv(
+                    normalized,
+                    [0, 1],
+                    tol=normalized_tol,
+                    error=True,
+                    method="gauss-legendre",
+                    maxdegree=6,
+                    maxintervals=32,
+                )
+                if not mp.isfinite(value) or not mp.isfinite(error):
+                    raise MathError("积分结果非有限", "domain_error", hint="结果不能是 NaN 或 Infinity")
+                if error > normalized_tol:
+                    raise MathError(
+                        "积分误差估计超过容差",
+                        "no_convergence",
+                        hint="缩小区间或在剧变处提供 points 拆分",
+                    )
+                # 采样非正负混合而积分近零，说明窄峰未被解析，不能当成功
+                if (
+                    sample_scale
+                    and not (
+                        any(v > 0 for v in section_samples) and any(v < 0 for v in section_samples)
+                    )
+                    and abs(value) <= normalized_tol
+                ):
+                    raise MathError(
+                        "积分可能漏掉未解析的窄峰",
+                        "no_convergence",
+                        hint="在窄峰周围增加 points 或缩小区间",
+                    )
+                total += width * scale * value
+            if not mp.isfinite(total):
+                raise MathError("积分结果非有限", "domain_error", hint="结果不能是 NaN 或 Infinity")
+            return format_result(sign * total, dps)
 
 
 def _findroot(packet) -> str:
@@ -259,7 +458,11 @@ def _calculate(packet):
     """按 packet 分派到对应同步算法。"""
     if packet["operation"] == "findroot":
         return _findroot(packet)
-    return _polyroots(packet)
+    if packet["operation"] == "polyroots":
+        return _polyroots(packet)
+    if packet["operation"] == "differentiate":
+        return _differentiate(packet)
+    return _integrate(packet)
 
 
 _WORKER_SLOTS = threading.BoundedSemaphore(2)
@@ -280,7 +483,7 @@ def _recover_error(payload: dict) -> MathError:
 async def numerical_operation(
     operation: str, *, dps: int = DEFAULT_DPS, timeout_seconds: float = 15.0, **params
 ) -> str | list[str]:
-    """在受限独立进程中执行数值求根，成功返回结果。"""
+    """在受限独立进程中执行数值运算，成功返回结果。"""
     packet = _validate_request(operation, dps, params)
     if (
         isinstance(timeout_seconds, bool)

@@ -1,6 +1,6 @@
 # 数学工具集
 
-基于 [NekoiMeiov/astrbot_plugin_mathitools](https://github.com/NekoiMeiov/astrbot_plugin_mathitools) 二次开发，为 AstrBot 提供表达式求值、单位换算、统计、矩阵、数值求根、数论与金融计算工具。
+基于 [NekoiMeiov/astrbot_plugin_mathitools](https://github.com/NekoiMeiov/astrbot_plugin_mathitools) 二次开发，为 AstrBot 提供表达式求值、单位换算、统计、矩阵、数值求根与微积分、数论与金融计算工具。
 
 > [!NOTE]
 > 运行要求：AstrBot >=4.29.1,<5。
@@ -25,13 +25,15 @@
 | math_nl_units | 自然语言单位换算，如 "5 km to miles" |
 | math_number_theory | 数论运算（is_prime/prime_factors/divisors/totient） |
 | math_finance | 金融计算（百分比/小费/利息/贷款/分摊/税费等 8 种） |
-| math_numerical | 数值求根（findroot 区间二分 / polyroots 降幂系数求根） |
+| math_numerical | 数值求根/微分/定积分（findroot 二分 / polyroots / differentiate / integrate） |
 
 统计扩展：weighted_mean 通过 weights 传入权重（同长、可为负但和非零）；covariance、correlation、linear_regression 通过 data2 传入第二组数据，data 为 x、data2 为 y。covariance 为样本协方差（n-1），correlation 为 Pearson 相关，linear_regression 返回 slope/intercept。percentile 的 p 取 0..100（含端点）线性插值。每组数据/权重至多 10000 个有限数。
 
 矩阵扩展：solve 通过 matrices=[A, b] 传入方阵 A 与列矩阵 b，求解 Ax=b；A 最多 50 阶，返回解的列矩阵。如 operation="solve"、matrices=[[[2,1],[1,-1]],[[5],[1]]] 返回 [[2.0],[1.0]]。
 
 数值求根：findroot 传 expression/a/b，固定自变量 x，在连续区间二分，端点异号或端点为根；polyroots 传降幂系数（最多 20 次），结果为字符串/字符串数组。dps 取 1..200。重根或病态问题可报 no_convergence。如 operation='findroot', expression='x^2-2', a=1, b=2。
+
+微分与定积分：differentiate 传 expression/x/n（n 默认 1，上限 5）；integrate 传 expression/a/b，允许反向与等端点，points 最多 32 个严格递增的内部拆分点。被积函数需有限连续且足够光滑，已知窄峰/折点用 points 拆分，求值次数用尽或精度不足报 no_convergence。dps 取 1..200，结果以字符串返回。
 
 ## 配置说明
 
@@ -42,30 +44,53 @@
 ## 安全说明
 
 表达式使用 AST 白名单求值，限制长度、嵌套、指数、超时与结果大小；表达式不能访问网络、文件或启动子进程。
-数值求根工具为计算启动受限工作进程：墙钟 15 秒、最多 2 并发、Linux 下 256MiB 内存与 10 秒 CPU 限额，取消和超时后即时回收。
+math_numerical 工具为计算启动受限工作进程：墙钟 15 秒、最多 2 并发、Linux 下 256MiB 内存与 10 秒 CPU 限额，积分总求值限 2048 次，取消和超时后即时回收。
 聚合与舍入函数 sum/prod/min/max/round 与 Python 3.12 语义一致，round 为半偶数舍入，ndigits 取 -10000..10000；列表按嵌套元素总数限 10000，prod 中间值与整数输出限 10000 位，总输出最多 10000 字符。
 
 ## 项目结构
 ```text
-main.py                 # 插件入口
-core/                   # 计算层
-schema.py               # 工具参数定义
-result.py               # 结果封装
-math_tools.py           # 数学工具
-tests/                  # 测试
-.github/workflows/      # 自动化检查
-README.md
-CHANGELOG.md
-LICENSE
-metadata.yaml
-_conf_schema.json
-requirements.txt
-.gitignore
+astrbot_plugin_mathitools/
+├── core/                      # 计算层
+│   ├── __init__.py
+│   ├── _numerical_worker.py    # 受限工作进程
+│   ├── errors.py               # 错误契约
+│   ├── evaluator.py            # 表达式求值
+│   ├── finance.py              # 金融计算
+│   ├── matrix.py               # 矩阵运算
+│   ├── number_theory.py        # 数论
+│   ├── numerical.py            # 求根与微积分
+│   ├── registry.py             # 函数与运算清单
+│   ├── security.py             # AST 安全校验
+│   ├── statistics.py           # 统计
+│   └── units.py                # 单位换算
+├── tests/                     # 回归测试
+│   ├── __init__.py
+│   ├── test_core.py
+│   ├── test_logger_import.py
+│   ├── test_math_ops.py
+│   ├── test_numerical.py
+│   ├── test_tools.py
+│   └── test_units.py
+├── .github/
+│   └── workflows/
+│       ├── codeql.yml           # 安全扫描
+│       └── tests.yml            # 单元测试
+├── main.py                    # 插件入口
+├── math_tools.py              # FunctionTool 接口
+├── schema.py                  # 工具参数
+├── result.py                  # 结果封装
+├── _conf_schema.json          # 插件配置
+├── metadata.yaml              # 插件元数据
+├── requirements.txt           # 运行依赖
+├── README.md
+├── CHANGELOG.md
+├── LICENSE
+└── .gitignore
 ```
 
 ## 更新日志
 
-详见 CHANGELOG.md。
+详见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 待办事项
 

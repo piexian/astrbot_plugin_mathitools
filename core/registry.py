@@ -73,7 +73,9 @@ STATISTICS_OPERATIONS: tuple[str, ...] = STATISTICS_FUNCTIONS + (
     "weighted_mean", "percentile", "covariance", "correlation", "linear_regression",
 )
 
-NUMERICAL_OPERATIONS: tuple[str, ...] = ("findroot", "polyroots")
+NUMERICAL_OPERATIONS: tuple[str, ...] = (
+    "findroot", "polyroots", "differentiate", "integrate",
+)
 
 MATRIX_OPERATIONS: tuple[str, ...] = (
     "multiply", "determinant", "inverse", "transpose", "rank",

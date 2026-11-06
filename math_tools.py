@@ -346,21 +346,28 @@ class MathMatrixTool(FunctionTool):
 class MathNumericalTool(FunctionTool):
     name: str = "math_numerical"
     description: str = (
-        "数值求根；findroot 对连续实函数表达式在区间二分求根，polyroots 对降幂系数"
-        "（至多 20 次）求全部根，根以字符串/字符串数组返回"
+        "数值运算；findroot 二分求根，polyroots 求多项式全部根，"
+        "differentiate 数值微分，integrate 数值积分，结果以字符串/字符串数组返回"
     )
     default_dps: int = DEFAULT_DPS
     parameters: dict = field(
         default_factory=lambda: object_parameters(
             {
                 "operation": string_parameter(
-                    "数值求根运算: " + ", ".join(NUMERICAL_OPERATIONS)
+                    "数值运算: " + ", ".join(NUMERICAL_OPERATIONS)
                 ),
                 "expression": string_parameter(
-                    "findroot 的连续实函数表达式，唯一自变量 x"
+                    "findroot/differentiate/integrate 的连续实函数表达式，唯一自变量 x；"
+                    "integrate 需有限连续且足够光滑，窄峰或折点用 points"
                 ),
-                "a": number_parameter("findroot 区间下端点，需 a<b 且端点异号或端点为根"),
-                "b": number_parameter("findroot 区间上端点，需 a<b 且端点异号或端点为根"),
+                "a": number_parameter("findroot 需 a<b 且端点异号或端点为根；integrate 允许反向或等端点"),
+                "b": number_parameter("findroot 需 a<b 且端点异号或端点为根；integrate 允许反向或等端点"),
+                "x": number_parameter("differentiate 的求导点，有限数字"),
+                "n": integer_parameter("differentiate 的求导阶数，1..5，默认 1"),
+                "points": array_parameter(
+                    "integrate 的拆分点，最多 32 项，严格递增且严格位于 min(a,b)..max(a,b) 开区间内",
+                    items=number_parameter("拆分点"),
+                ),
                 "coefficients": array_parameter(
                     "polyroots 的降幂系数，至多 21 项且前导项非零",
                     items=number_parameter("系数"),
@@ -378,7 +385,7 @@ class MathNumericalTool(FunctionTool):
             )
             params = {
                 key: kwargs[key]
-                for key in ("expression", "a", "b", "coefficients")
+                for key in ("expression", "a", "b", "coefficients", "x", "n", "points")
                 if key in kwargs
             }
             result = await numerical_operation(

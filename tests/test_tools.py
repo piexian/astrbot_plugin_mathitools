@@ -122,7 +122,7 @@ class ToolSchemaTest(unittest.TestCase):
     def test_math_numerical_schema_optional_params(self):
         tool = MathNumericalTool()
         self.assertEqual(tool.parameters["required"], ["operation"])
-        for key in ("expression", "a", "b", "coefficients", "dps"):
+        for key in ("expression", "a", "b", "coefficients", "dps", "x", "n", "points"):
             self.assertIn(key, tool.parameters["properties"])
         self.assertNotIn("timeout_seconds", tool.parameters["properties"])
 
@@ -272,7 +272,8 @@ class ToolBehaviorTest(unittest.TestCase):
         ):
             self.assertIn(name, payload["result"]["statistics_operations"])
         self.assertEqual(
-            payload["result"]["numerical_operations"], ["findroot", "polyroots"]
+            payload["result"]["numerical_operations"],
+            ["findroot", "polyroots", "differentiate", "integrate"],
         )
 
     def test_math_matrix_dimension_error(self):
@@ -327,6 +328,15 @@ class ToolBehaviorTest(unittest.TestCase):
         self.assertAlmostEqual(imag[0], -1, places=12)
         self.assertAlmostEqual(imag[1], 1, places=12)
 
+    def test_math_numerical_calculus_ok(self):
+        payload = _call(MathNumericalTool(), operation="differentiate", expression="x^3", x=2, n=2)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"], "12")
+        payload = _call(MathNumericalTool(), operation="integrate", expression="x^2", a=0, b=1)
+        self.assertTrue(payload["ok"])
+        with mp.workdps(50):
+            self.assertLess(abs(mp.mpf(payload["result"]) - mp.mpf(1) / 3), mp.mpf("1e-20"))
+
     def test_math_numerical_errors(self):
         payload = _call(MathNumericalTool())
         self.assertEqual(payload["error_code"], "invalid_argument")
@@ -338,7 +348,25 @@ class ToolBehaviorTest(unittest.TestCase):
         self.assertEqual(payload["error_code"], "invalid_argument")
         payload = _call(MathNumericalTool(), operation="zz")
         self.assertEqual(payload["error_code"], "unknown_operation")
-        self.assertEqual(payload["valid_options"], ["findroot", "polyroots"])
+        self.assertEqual(
+            payload["valid_options"],
+            ["findroot", "polyroots", "differentiate", "integrate"],
+        )
+        payload = _call(MathNumericalTool(), operation="differentiate", expression="x")
+        self.assertEqual(payload["error_code"], "invalid_argument")
+        payload = _call(MathNumericalTool(), operation="differentiate", expression="x^2", x=2, n=6)
+        self.assertEqual(payload["error_code"], "invalid_argument")
+        payload = _call(
+            MathNumericalTool(), operation="integrate", expression="x", a=0, b=1, points=[2]
+        )
+        self.assertEqual(payload["error_code"], "invalid_argument")
+        payload = _call(MathNumericalTool(), operation="integrate", expression="1/x", a=0, b=1)
+        self.assertEqual(payload["error_code"], "division_by_zero")
+        payload = _call(
+            MathNumericalTool(), operation="integrate",
+            expression="exp(-10^8*(x-0.3)^2)", a=0, b=1, points=[0.3],
+        )
+        self.assertEqual(payload["error_code"], "no_convergence")
 
     def test_math_numerical_default_dps_applied(self):
         tool = MathNumericalTool(default_dps=80)
