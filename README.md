@@ -43,11 +43,10 @@
 |---|---|---|---|
 | dps | int | 20 | 计算精度，范围 1..200 |
 
-## 安全说明
+## 安全与 Benchmark
 
-表达式使用 AST 白名单求值，限制长度、嵌套、指数、超时与结果大小；表达式不能访问网络、文件或启动子进程。
-math_numerical 工具为计算启动受限工作进程：墙钟 15 秒、最多 2 并发、Linux 下 256MiB 内存与 10 秒 CPU 限额，积分总求值限 2048 次，取消和超时后即时回收。
-聚合与舍入函数 sum/prod/min/max/round 与 Python 3.12 语义一致，round 为半偶数舍入，ndigits 取 -10000..10000；列表按嵌套元素总数限 10000，prod 中间值与整数输出限 10000 位，总输出最多 10000 字符。
+表达式使用 AST 白名单且不能访问网络、文件或启动子进程；math_numerical 工作进程限制墙钟 15 秒、最多 2 并发、积分 2048 次求值，生产限额为 Linux 256MiB 地址空间与 10 秒 CPU、Windows 256MiB 提交内存与 10 秒用户态 CPU、macOS 启动 VMS 基线追加 128MiB 地址空间与 10 秒 CPU，聚合与舍入仍按 Python 3.12 语义并限制列表、整数和输出大小。
+[benchmark.yml](.github/workflows/benchmark.yml) 在 Ubuntu/Windows/macOS 原生运行，真实加载 AstrBot、注册 11 个工具并执行 9 次调用，验证限额、超时取消回收和错误恢复，结果见 CI artifacts。
 
 ## 项目结构
 ```text
@@ -55,6 +54,7 @@ astrbot_plugin_mathitools/
 ├── core/                      # 计算层
 │   ├── __init__.py
 │   ├── _numerical_worker.py    # 受限工作进程
+│   ├── _resource_limits.py     # 跨平台原生资源限额
 │   ├── errors.py               # 错误契约
 │   ├── evaluator.py            # 表达式求值
 │   ├── finance.py              # 金融计算
@@ -75,9 +75,14 @@ astrbot_plugin_mathitools/
 │   ├── test_probability.py
 │   ├── test_tools.py
 │   └── test_units.py
+├── benchmarks/                 # 三平台原生预检
+│   ├── run.py                  # 父调度汇总
+│   ├── native_probe.py         # 内存/CPU 限额探针
+│   └── astrbot_probe.py        # 真实 SDK 工具调用
 ├── .github/
 │   └── workflows/
 │       ├── codeql.yml           # 安全扫描
+│       ├── benchmark.yml       # 三平台原生预检
 │       └── tests.yml            # 单元测试
 ├── main.py                    # 插件入口
 ├── math_tools.py              # FunctionTool 接口
@@ -111,4 +116,10 @@ astrbot_plugin_mathitools/
 
 ## 许可
 
-AGPL-3.0-or-later
+AGPL-3.0 License
+
+<div align="center">
+
+**如果这个插件对你有帮助，请给个 ⭐ Star 支持一下！**
+
+</div>

@@ -10,6 +10,7 @@ import threading
 
 from mpmath import mp
 
+from ._resource_limits import WINDOWS_CPU_LIMIT_EXIT_CODE
 from .errors import MathError
 from .evaluator import (
     DEFAULT_DPS,
@@ -539,7 +540,7 @@ async def numerical_operation(
                 "timeout",
                 hint="简化问题、降低 dps 或重试",
             )
-        if proc.returncode in (-24, -9):
+        if proc.returncode in (-24, -9, WINDOWS_CPU_LIMIT_EXIT_CODE):
             raise MathError(
                 "数值运算超时或被系统终止",
                 "timeout",
