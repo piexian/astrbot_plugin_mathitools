@@ -1,4 +1,4 @@
-"""astrbot_plugin_mathitools 入口：注册 10 个数学 FunctionTool，计算逻辑在 core/。"""
+"""astrbot_plugin_mathitools 入口：注册 11 个数学 FunctionTool，计算逻辑在 core/。"""
 
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.star import Context, Star
@@ -10,6 +10,7 @@ from .math_tools import (
     MathFinanceTool,
     MathFunctionsTool,
     MathMatrixTool,
+    MathNumericalTool,
     MathNaturalLanguageUnitsTool,
     MathNumberTheoryTool,
     MathStatisticsTool,
@@ -42,6 +43,7 @@ class MathitoolsPlugin(Star):
             MathFunctionsTool(),
             MathStatisticsTool(),
             MathMatrixTool(),
+            MathNumericalTool(default_dps=self._dps),
             MathUnitsTool(),
             MathNaturalLanguageUnitsTool(),
             MathNumberTheoryTool(),

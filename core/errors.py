@@ -15,6 +15,7 @@ ERROR_CODES: frozenset[str] = frozenset(
         "exponent_too_large",
         "result_too_large",
         "timeout",
+        "no_convergence",
         "matrix_dimension",
         "singular_matrix",
         "non_integer",

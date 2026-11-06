@@ -1,4 +1,4 @@
-"""10 个数学 FunctionTool：统一 JSON 字符串返回与 AI 友好错误契约。"""
+"""11 个数学 FunctionTool：统一 JSON 字符串返回与 AI 友好错误契约。"""
 
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -9,6 +9,7 @@ from .core.errors import MathError
 from .core.evaluator import evaluate
 from .core.finance import finance_operation
 from .core.matrix import matrix_operation
+from .core.numerical import numerical_operation
 from .core.number_theory import number_theory_operation
 from .core.registry import (
     ALL_FUNCTION_NAMES,
@@ -16,6 +17,7 @@ from .core.registry import (
     FINANCE_OPERATIONS,
     MATRIX_OPERATIONS,
     NUMBER_THEORY_OPERATIONS,
+    NUMERICAL_OPERATIONS,
     OPERATORS,
     STATISTICS_OPERATIONS,
     UNIT_ALIASES,
@@ -257,6 +259,7 @@ class MathFunctionsTool(FunctionTool):
             "operators": sorted(op.__name__ for op in OPERATORS),
             "statistics_operations": list(STATISTICS_OPERATIONS),
             "matrix_operations": list(MATRIX_OPERATIONS),
+            "numerical_operations": list(NUMERICAL_OPERATIONS),
             "number_theory_operations": list(NUMBER_THEORY_OPERATIONS),
             "finance_operations": list(FINANCE_OPERATIONS),
         }
@@ -337,6 +340,55 @@ class MathMatrixTool(FunctionTool):
             return matrix_operation(kwargs.get("matrices"), operation)
 
         return _run("math_matrix", work)
+
+
+@dataclass
+class MathNumericalTool(FunctionTool):
+    name: str = "math_numerical"
+    description: str = (
+        "数值求根；findroot 对连续实函数表达式在区间二分求根，polyroots 对降幂系数"
+        "（至多 20 次）求全部根，根以字符串/字符串数组返回"
+    )
+    default_dps: int = DEFAULT_DPS
+    parameters: dict = field(
+        default_factory=lambda: object_parameters(
+            {
+                "operation": string_parameter(
+                    "数值求根运算: " + ", ".join(NUMERICAL_OPERATIONS)
+                ),
+                "expression": string_parameter(
+                    "findroot 的连续实函数表达式，唯一自变量 x"
+                ),
+                "a": number_parameter("findroot 区间下端点，需 a<b 且端点异号或端点为根"),
+                "b": number_parameter("findroot 区间上端点，需 a<b 且端点异号或端点为根"),
+                "coefficients": array_parameter(
+                    "polyroots 的降幂系数，至多 21 项且前导项非零",
+                    items=number_parameter("系数"),
+                ),
+                "dps": integer_parameter("计算精度 1..200，默认采用插件配置"),
+            },
+            required=["operation"],
+        )
+    )
+
+    async def call(self, context: Any, **kwargs: Any) -> str:
+        try:
+            operation = _require_str(
+                kwargs, "operation", 'operation="findroot", expression="x^2-2", a=1, b=2'
+            )
+            params = {
+                key: kwargs[key]
+                for key in ("expression", "a", "b", "coefficients")
+                if key in kwargs
+            }
+            result = await numerical_operation(
+                operation, dps=_dps(kwargs, self.default_dps), **params
+            )
+            return ok_result(result=result)
+        except MathError as exc:
+            return _math_error_response("math_numerical", exc)
+        except Exception as exc:
+            return _unexpected_error_response("math_numerical", exc)
 
 
 @dataclass
@@ -464,6 +516,7 @@ ALL_TOOLS: tuple[type[FunctionTool], ...] = (
     MathFunctionsTool,
     MathStatisticsTool,
     MathMatrixTool,
+    MathNumericalTool,
     MathUnitsTool,
     MathNaturalLanguageUnitsTool,
     MathNumberTheoryTool,

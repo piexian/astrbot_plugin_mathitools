@@ -1,6 +1,6 @@
 # 数学工具集
 
-基于 [NekoiMeiov/astrbot_plugin_mathitools](https://github.com/NekoiMeiov/astrbot_plugin_mathitools) 二次开发，为 AstrBot 提供表达式求值、单位换算、统计、矩阵、数论与金融计算工具。
+基于 [NekoiMeiov/astrbot_plugin_mathitools](https://github.com/NekoiMeiov/astrbot_plugin_mathitools) 二次开发，为 AstrBot 提供表达式求值、单位换算、统计、矩阵、数值求根、数论与金融计算工具。
 
 > [!NOTE]
 > 运行要求：AstrBot >=4.29.1,<5。
@@ -25,10 +25,13 @@
 | math_nl_units | 自然语言单位换算，如 "5 km to miles" |
 | math_number_theory | 数论运算（is_prime/prime_factors/divisors/totient） |
 | math_finance | 金融计算（百分比/小费/利息/贷款/分摊/税费等 8 种） |
+| math_numerical | 数值求根（findroot 区间二分 / polyroots 降幂系数求根） |
 
 统计扩展：weighted_mean 通过 weights 传入权重（同长、可为负但和非零）；covariance、correlation、linear_regression 通过 data2 传入第二组数据，data 为 x、data2 为 y。covariance 为样本协方差（n-1），correlation 为 Pearson 相关，linear_regression 返回 slope/intercept。percentile 的 p 取 0..100（含端点）线性插值。每组数据/权重至多 10000 个有限数。
 
 矩阵扩展：solve 通过 matrices=[A, b] 传入方阵 A 与列矩阵 b，求解 Ax=b；A 最多 50 阶，返回解的列矩阵。如 operation="solve"、matrices=[[[2,1],[1,-1]],[[5],[1]]] 返回 [[2.0],[1.0]]。
+
+数值求根：findroot 传 expression/a/b，固定自变量 x，在连续区间二分，端点异号或端点为根；polyroots 传降幂系数（最多 20 次），结果为字符串/字符串数组。dps 取 1..200。重根或病态问题可报 no_convergence。如 operation='findroot', expression='x^2-2', a=1, b=2。
 
 ## 配置说明
 
@@ -38,7 +41,8 @@
 
 ## 安全说明
 
-表达式使用 AST 白名单求值，限制长度、嵌套、指数、超时与结果大小；计算不访问网络、文件或子进程。
+表达式使用 AST 白名单求值，限制长度、嵌套、指数、超时与结果大小；表达式不能访问网络、文件或启动子进程。
+数值求根工具为计算启动受限工作进程：墙钟 15 秒、最多 2 并发、Linux 下 256MiB 内存与 10 秒 CPU 限额，取消和超时后即时回收。
 聚合与舍入函数 sum/prod/min/max/round 与 Python 3.12 语义一致，round 为半偶数舍入，ndigits 取 -10000..10000；列表按嵌套元素总数限 10000，prod 中间值与整数输出限 10000 位，总输出最多 10000 字符。
 
 ## 项目结构

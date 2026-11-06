@@ -8,6 +8,8 @@ import unittest
 from dataclasses import dataclass, field
 from typing import Any
 
+from mpmath import mp
+
 
 @dataclass
 class _StubFunctionTool:
@@ -52,6 +54,7 @@ from astrbot_plugin_mathitools.math_tools import (  # noqa: E402
     MathFunctionsTool,
     MathMatrixTool,
     MathNaturalLanguageUnitsTool,
+    MathNumericalTool,
     MathNumberTheoryTool,
     MathStatisticsTool,
     MathUnitsTool,
@@ -66,6 +69,7 @@ EXPECTED_REQUIRED = {
     "math_functions": [],
     "math_statistics": ["operation", "data"],
     "math_matrix": ["operation", "matrices"],
+    "math_numerical": ["operation"],
     "math_units": ["value", "from_unit", "to_unit", "unit_type"],
     "math_nl_units": ["query"],
     "math_number_theory": ["operation", "number"],
@@ -96,6 +100,7 @@ def _all_tools():
         MathFunctionsTool(),
         MathStatisticsTool(),
         MathMatrixTool(),
+        MathNumericalTool(),
         MathUnitsTool(),
         MathNaturalLanguageUnitsTool(),
         MathNumberTheoryTool(),
@@ -104,14 +109,22 @@ def _all_tools():
 
 
 class ToolSchemaTest(unittest.TestCase):
-    def test_ten_tools_names_and_required(self):
+    def test_eleven_tools_names_and_required(self):
         tools = _all_tools()
+        self.assertEqual(len(tools), 11)
         self.assertEqual({tool.name for tool in tools}, set(EXPECTED_REQUIRED))
         for tool in tools:
             self.assertEqual(tool.parameters["type"], "object")
             self.assertEqual(tool.parameters["required"], EXPECTED_REQUIRED[tool.name])
             for key in EXPECTED_REQUIRED[tool.name]:
                 self.assertIn(key, tool.parameters["properties"])
+
+    def test_math_numerical_schema_optional_params(self):
+        tool = MathNumericalTool()
+        self.assertEqual(tool.parameters["required"], ["operation"])
+        for key in ("expression", "a", "b", "coefficients", "dps"):
+            self.assertIn(key, tool.parameters["properties"])
+        self.assertNotIn("timeout_seconds", tool.parameters["properties"])
 
     def test_schema_has_no_gateway_rejected_keys(self):
         for tool in _all_tools():
@@ -258,6 +271,9 @@ class ToolBehaviorTest(unittest.TestCase):
             "weighted_mean", "percentile", "covariance", "correlation", "linear_regression"
         ):
             self.assertIn(name, payload["result"]["statistics_operations"])
+        self.assertEqual(
+            payload["result"]["numerical_operations"], ["findroot", "polyroots"]
+        )
 
     def test_math_matrix_dimension_error(self):
         payload = _call(
@@ -297,6 +313,42 @@ class ToolBehaviorTest(unittest.TestCase):
         self.assertEqual(payload["error_code"], "unknown_operation")
         self.assertEqual(len(payload["valid_options"]), 6)
         self.assertIn("solve", payload["valid_options"])
+
+    def test_math_numerical_findroot_ok(self):
+        payload = _call(MathNumericalTool(), operation="findroot", expression="x-2", a=1, b=3)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(float(payload["result"]), 2.0)
+
+    def test_math_numerical_polyroots_conjugate_ok(self):
+        payload = _call(MathNumericalTool(), operation="polyroots", coefficients=[1, 0, 1])
+        self.assertTrue(payload["ok"])
+        roots = sorted(payload["result"], key=lambda t: complex(t.replace(" ", "")).imag)
+        imag = [complex(t.replace(" ", "")).imag for t in roots]
+        self.assertAlmostEqual(imag[0], -1, places=12)
+        self.assertAlmostEqual(imag[1], 1, places=12)
+
+    def test_math_numerical_errors(self):
+        payload = _call(MathNumericalTool())
+        self.assertEqual(payload["error_code"], "invalid_argument")
+        payload = _call(MathNumericalTool(), operation="findroot", expression="x")
+        self.assertEqual(payload["error_code"], "invalid_argument")
+        payload = _call(MathNumericalTool(), operation="polyroots")
+        self.assertEqual(payload["error_code"], "invalid_argument")
+        payload = _call(MathNumericalTool(), operation="findroot", dps=0, expression="x", a=1, b=2)
+        self.assertEqual(payload["error_code"], "invalid_argument")
+        payload = _call(MathNumericalTool(), operation="zz")
+        self.assertEqual(payload["error_code"], "unknown_operation")
+        self.assertEqual(payload["valid_options"], ["findroot", "polyroots"])
+
+    def test_math_numerical_default_dps_applied(self):
+        tool = MathNumericalTool(default_dps=80)
+        payload = _call(tool, operation="findroot", expression="x^2-2", a=1, b=2)
+        self.assertTrue(payload["ok"])
+        with mp.workdps(100):
+            self.assertLess(abs(mp.mpf(payload["result"]) - mp.sqrt(2)), mp.mpf(10) ** -78)
+        payload = _call(MathNumericalTool(), operation="findroot", expression="x^2-2", a=1, b=2)
+        with mp.workdps(100):
+            self.assertGreater(abs(mp.mpf(payload["result"]) - mp.sqrt(2)), mp.mpf(10) ** -78)
 
     def test_math_units_unknown_unit(self):
         payload = _call(MathUnitsTool(), value=1, from_unit="km", to_unit="zz", unit_type="length")
