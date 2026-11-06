@@ -69,7 +69,9 @@ FORBIDDEN_PATTERNS: tuple[str, ...] = (
     r"hasattr\s*\(",
 )
 
-STATISTICS_OPERATIONS: tuple[str, ...] = STATISTICS_FUNCTIONS
+STATISTICS_OPERATIONS: tuple[str, ...] = STATISTICS_FUNCTIONS + (
+    "weighted_mean", "percentile", "covariance", "correlation", "linear_regression",
+)
 
 MATRIX_OPERATIONS: tuple[str, ...] = (
     "multiply", "determinant", "inverse", "transpose", "rank",

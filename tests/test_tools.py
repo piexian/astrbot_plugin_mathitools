@@ -197,12 +197,65 @@ class ToolBehaviorTest(unittest.TestCase):
         payload = _call(MathStatisticsTool(), operation="zz", data=[1, 2, 3])
         self.assertFalse(payload["ok"])
         self.assertEqual(payload["error_code"], "unknown_operation")
+        self.assertEqual(len(payload["valid_options"]), 15)
         self.assertIn("mean", payload["valid_options"])
+        for name in (
+            "weighted_mean", "percentile", "covariance", "correlation", "linear_regression"
+        ):
+            self.assertIn(name, payload["valid_options"])
 
     def test_math_statistics_ok(self):
         payload = _call(MathStatisticsTool(), operation="mean", data=[1, 2, 3, 4])
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["result"], 2.5)
+
+    def test_math_statistics_new_operations_ok(self):
+        payload = _call(
+            MathStatisticsTool(), operation="weighted_mean", data=[1, 3], weights=[1, 3]
+        )
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"], 2.5)
+        payload = _call(MathStatisticsTool(), operation="percentile", data=[1, 2, 3, 4], p=25)
+        self.assertEqual(payload["result"], 1.75)
+        payload = _call(
+            MathStatisticsTool(), operation="covariance", data=[1, 2, 3], data2=[2, 4, 6]
+        )
+        self.assertEqual(payload["result"], 2)
+        payload = _call(
+            MathStatisticsTool(), operation="correlation", data=[1, 2, 3], data2=[2, 4, 6]
+        )
+        self.assertEqual(payload["result"], 1)
+        payload = _call(
+            MathStatisticsTool(), operation="linear_regression", data=[1, 2, 3], data2=[3, 5, 7]
+        )
+        self.assertEqual(payload["result"], {"slope": 2, "intercept": 1})
+
+    def test_math_statistics_optional_params_invalid(self):
+        cases = [
+            dict(operation="weighted_mean", data=[1, 3]),
+            dict(operation="covariance", data=[1, 2, 3], data2=[1, 2]),
+            dict(operation="percentile", data=[1, 2, 3], p=101),
+            dict(operation="percentile", data=[1, 2, 3], p=-1),
+        ]
+        for kwargs in cases:
+            with self.subTest(**kwargs):
+                payload = _call(MathStatisticsTool(), **kwargs)
+                self.assertFalse(payload["ok"])
+                self.assertEqual(payload["error_code"], "invalid_argument")
+
+    def test_math_statistics_schema_keeps_required_and_optional_params(self):
+        tool = MathStatisticsTool()
+        self.assertEqual(tool.parameters["required"], ["operation", "data"])
+        for key in ("weights", "data2", "p"):
+            self.assertIn(key, tool.parameters["properties"])
+
+    def test_math_functions_lists_15_statistics_operations(self):
+        payload = _call(MathFunctionsTool())
+        self.assertEqual(len(payload["result"]["statistics_operations"]), 15)
+        for name in (
+            "weighted_mean", "percentile", "covariance", "correlation", "linear_regression"
+        ):
+            self.assertIn(name, payload["result"]["statistics_operations"])
 
     def test_math_matrix_dimension_error(self):
         payload = _call(

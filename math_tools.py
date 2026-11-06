@@ -266,15 +266,28 @@ class MathFunctionsTool(FunctionTool):
 @dataclass
 class MathStatisticsTool(FunctionTool):
     name: str = "math_statistics"
-    description: str = "对数字列表执行统计运算"
+    description: str = "对数字列表执行 15 种统计运算，含加权平均、百分位、样本协方差、Pearson 相关与线性回归"
     parameters: dict = field(
         default_factory=lambda: object_parameters(
             {
                 "operation": string_parameter(
-                    "统计运算: mean, median, mode, stdev, pstdev, variance, "
-                    "pvariance, harmonic_mean, geometric_mean, quantiles"
+                    "统计运算: " + ", ".join(STATISTICS_OPERATIONS)
                 ),
-                "data": array_parameter("数字列表，如 [1, 2, 3]", items=number_parameter("数据点")),
+                "data": array_parameter(
+                    "数字列表，最多 10000 个有限数字，如 [1, 2, 3]（协方差/相关/回归中为 x）",
+                    items=number_parameter("数据点"),
+                ),
+                "weights": array_parameter(
+                    "与 data 等长的权重，允许负数但权重和不能为 0（仅 weighted_mean）",
+                    items=number_parameter("权重"),
+                ),
+                "data2": array_parameter(
+                    "y 数据，与 data（x）等长且至少两对（仅 covariance/correlation/linear_regression）",
+                    items=number_parameter("数据点"),
+                ),
+                "p": number_parameter(
+                    "percentile 的百分位，0 到 100，包含端点线性插值"
+                ),
             },
             required=["operation", "data"],
         )
@@ -283,7 +296,13 @@ class MathStatisticsTool(FunctionTool):
     async def call(self, context: Any, **kwargs: Any) -> str:
         def work() -> Any:
             operation = _require_str(kwargs, "operation", 'operation="mean", data=[1, 2, 3]')
-            return calculate_statistics(kwargs.get("data"), operation)
+            return calculate_statistics(
+                kwargs.get("data"),
+                operation,
+                weights=kwargs.get("weights"),
+                data2=kwargs.get("data2"),
+                p=kwargs.get("p"),
+            )
 
         return _run("math_statistics", work)
 

@@ -1,5 +1,8 @@
 """统计、矩阵、数论、金融、单位运算测试。"""
 
+import decimal
+import math
+import statistics
 import unittest
 
 from astrbot_plugin_mathitools.core.errors import MathError
@@ -61,6 +64,159 @@ class StatisticsTest(unittest.TestCase):
             with self.assertRaises(MathError) as ctx:
                 calculate_statistics(data, "mean")
             self.assertEqual(ctx.exception.error_code, "invalid_argument")
+
+
+    def test_weighted_mean(self):
+        self.assertEqual(
+            calculate_statistics([1, 3], "weighted_mean", weights=[1, 3]), 2.5
+        )
+        self.assertEqual(
+            calculate_statistics([1, 3], "weighted_mean", weights=[-1, 2]), 5
+        )
+        result = calculate_statistics([1e308, 1e308], "weighted_mean", weights=[1, 1])
+        self.assertEqual(result, 1e308)
+        self.assertEqual(calculate_statistics([7], "weighted_mean", weights=[3]), 7)
+
+    def test_percentile(self):
+        self.assertEqual(calculate_statistics([1, 2, 3, 4], "percentile", p=25), 1.75)
+        self.assertEqual(calculate_statistics([1, 2, 3, 4], "percentile", p=0), 1)
+        self.assertEqual(calculate_statistics([1, 2, 3, 4], "percentile", p=100), 4)
+        self.assertEqual(calculate_statistics([1, 2, 3, 4], "percentile", p=50), 2.5)
+        self.assertEqual(calculate_statistics([9], "percentile", p=37), 9)
+        self.assertEqual(calculate_statistics([-1e308, 1e308], "percentile", p=50), 0)
+
+    def test_covariance(self):
+        self.assertEqual(calculate_statistics([1, 2, 3], "covariance", data2=[2, 4, 6]), 2)
+        self.assertEqual(calculate_statistics([5, 5, 5], "covariance", data2=[2, 4, 6]), 0)
+        self.assertEqual(calculate_statistics([1, 2, 3], "covariance", data2=[6, 4, 2]), -2)
+
+    def test_correlation(self):
+        self.assertAlmostEqual(
+            calculate_statistics([1, 2, 3], "correlation", data2=[2, 4, 6]), 1, places=12
+        )
+        self.assertAlmostEqual(
+            calculate_statistics([1, 2, 3], "correlation", data2=[6, 4, 2]), -1, places=12
+        )
+        self.assertEqual(
+            calculate_statistics(
+                [1e100, 2e100, 3e100], "correlation", data2=[2e100, 4e100, 6e100]
+            ),
+            1,
+        )
+        self.assertAlmostEqual(
+            calculate_statistics([1, 2, 3], "correlation", data2=[1, 3, 2]),
+            statistics.correlation([1, 2, 3], [1, 3, 2]),
+            places=12,
+        )
+
+    def test_linear_regression(self):
+        self.assertEqual(
+            calculate_statistics([1, 2, 3], "linear_regression", data2=[3, 5, 7]),
+            {"slope": 2, "intercept": 1},
+        )
+        result = calculate_statistics([1, 2, 3], "linear_regression", data2=[4, 4, 4])
+        self.assertEqual(result["slope"], 0)
+        self.assertEqual(result["intercept"], 4)
+        result = calculate_statistics(
+            [1e200, 2e200, 3e200], "linear_regression", data2=[2e200, 4e200, 6e200]
+        )
+        self.assertEqual(result["slope"], 2)
+        self.assertEqual(result["intercept"], 0)
+
+    def test_math_undefined_is_domain_error(self):
+        cases = [
+            ([1, 3], "weighted_mean", {"weights": [1, -1]}),
+            ([1], "covariance", {"data2": [1]}),
+            ([1], "correlation", {"data2": [1]}),
+            ([1, 2, 3], "correlation", {"data2": [5, 5, 5]}),
+            ([5, 5, 5], "correlation", {"data2": [1, 2, 3]}),
+            ([5, 5, 5], "linear_regression", {"data2": [1, 2, 3]}),
+            ([1], "linear_regression", {"data2": [1]}),
+            ([1e308, -1e308], "covariance", {"data2": [1e308, -1e308]}),
+        ]
+        for data, op, kwargs in cases:
+            with self.subTest(operation=op, data=data, **kwargs):
+                with self.assertRaises(MathError) as ctx:
+                    calculate_statistics(data, op, **kwargs)
+                self.assertEqual(ctx.exception.error_code, "domain_error")
+
+    def test_invalid_weights_rejected(self):
+        cases = [
+            ([1, 3], None),
+            ([1, 3], []),
+            ([1, 3], 1),
+            ([1, 3], [1]),
+            ([1, 3], [True, 1]),
+            ([1, 3], [1, float("nan")]),
+            ([1, 3], [1, float("inf")]),
+            ([1, 3], [1, [2]]),
+            ([1, 3], [1, 10**400]),
+        ]
+        for data, weights in cases:
+            with self.subTest(weights=weights):
+                with self.assertRaises(MathError) as ctx:
+                    calculate_statistics(data, "weighted_mean", weights=weights)
+                self.assertEqual(ctx.exception.error_code, "invalid_argument")
+        with self.subTest(case="missing"):
+            with self.assertRaises(MathError) as ctx:
+                calculate_statistics([1, 3], "weighted_mean")
+            self.assertEqual(ctx.exception.error_code, "invalid_argument")
+
+    def test_invalid_data2_rejected(self):
+        cases = [
+            ([1, 2, 3], None),
+            ([1, 2, 3], 1),
+            ([1, 2, 3], []),
+            ([1, 2, 3], [1, 2]),
+            ([1, 2, 3], [True, 2, 3]),
+            ([1, 2, 3], [1, float("nan"), 3]),
+            ([1, 2, 3], [1, float("inf"), 3]),
+            ([1, 2, 3], [1, [2], 3]),
+            ([1, 2, 3], [1, 10**400, 3]),
+        ]
+        for data, data2 in cases:
+            with self.subTest(data2=data2):
+                with self.assertRaises(MathError) as ctx:
+                    calculate_statistics(data, "covariance", data2=data2)
+                self.assertEqual(ctx.exception.error_code, "invalid_argument")
+        with self.subTest(case="missing"):
+            with self.assertRaises(MathError) as ctx:
+                calculate_statistics([1, 2, 3], "covariance")
+            self.assertEqual(ctx.exception.error_code, "invalid_argument")
+
+    def test_invalid_percentile_p_rejected(self):
+        data = [1, 2, 3, 4]
+        cases = [None, True, "50", float("nan"), float("inf"), -1, 101]
+        for p in cases:
+            with self.subTest(p=p):
+                with self.assertRaises(MathError) as ctx:
+                    calculate_statistics(data, "percentile", p=p)
+                self.assertEqual(ctx.exception.error_code, "invalid_argument")
+        with self.subTest(case="missing"):
+            with self.assertRaises(MathError) as ctx:
+                calculate_statistics(data, "percentile")
+            self.assertEqual(ctx.exception.error_code, "invalid_argument")
+
+    def test_decimal_context_isolated(self):
+        cases = [
+            ([1, 2, 3], [1, 2, 2], math.sqrt(3) / 2),
+            ([1, 2, 3], [2, 1, 1], -math.sqrt(3) / 2),
+        ]
+        with decimal.localcontext() as ctx:
+            ctx.prec = 7
+            ctx.clear_flags()
+            ctx.traps[decimal.Inexact] = True
+            before = repr(decimal.getcontext())
+            for data, data2, expected in cases:
+                result = calculate_statistics(data, "correlation", data2=data2)
+                self.assertAlmostEqual(result, expected, places=12)
+            self.assertEqual(repr(decimal.getcontext()), before)
+
+    def test_percentile_big_int_endpoints(self):
+        data = [10**100 + 1, 10**100 + 2]
+        self.assertEqual(calculate_statistics(data, "percentile", p=0), 10**100 + 1)
+        self.assertEqual(calculate_statistics(data, "percentile", p=100), 10**100 + 2)
+        self.assertEqual(calculate_statistics([10**100 + 1], "percentile", p=37), 10**100 + 1)
 
 
 class MatrixTest(unittest.TestCase):
