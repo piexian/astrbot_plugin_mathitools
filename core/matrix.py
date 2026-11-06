@@ -2,6 +2,7 @@
 
 from .errors import MathError
 from .registry import MATRIX_OPERATIONS
+from .statistics import valid_number
 
 
 def matrix_operation(matrices: list, operation: str):
@@ -68,11 +69,11 @@ def _validate(matrix) -> list[list[float]]:
         )
     for row in matrix:
         for entry in row:
-            if isinstance(entry, bool) or not isinstance(entry, (int, float)):
+            if not valid_number(entry):
                 raise MathError(
-                    "矩阵元素必须是数字",
+                    "矩阵元素必须是有限数字",
                     "invalid_argument",
-                    hint="不接受字符串或其他类型",
+                    hint="不接受字符串、布尔值、NaN 或无穷大",
                 )
     return [[float(entry) for entry in row] for row in matrix]
 

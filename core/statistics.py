@@ -1,10 +1,20 @@
 """10 个统计运算，基于标准库 statistics。"""
 
+import math
 import statistics
 
 from .errors import MathError
 from .registry import STATISTICS_OPERATIONS
 
+
+def valid_number(value) -> bool:
+    """有限实数且非布尔值；超出浮点表示范围的整数同样视为非法。"""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
 _OPS: dict = {
     "mean": statistics.mean,
     "median": statistics.median,
@@ -36,6 +46,14 @@ def calculate_statistics(data: list, operation: str):
             hint="至少需要一个数据点",
             example='calculate_statistics([1, 2, 3], "mean")',
         )
+    for entry in data:
+        if not valid_number(entry):
+            raise MathError(
+                "data 元素必须是有限数字",
+                "invalid_argument",
+                hint="不接受字符串、布尔值、NaN、Infinity 或嵌套列表",
+                example='calculate_statistics([1, 2, 3], "mean")',
+            )
     try:
         return _OPS[operation](data)
     except statistics.StatisticsError as exc:

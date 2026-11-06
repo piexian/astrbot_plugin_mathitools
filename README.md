@@ -1,15 +1,15 @@
 # 数学工具集
 
-AstrBot 4.29.1+ 的 10 个数学 FunctionTool，基于 mpmath / asteval。
+基于 [NekoiMeiov/astrbot_plugin_mathitools](https://github.com/NekoiMeiov/astrbot_plugin_mathitools) 二次开发，为 AstrBot 提供表达式求值、单位换算、统计、矩阵、数论与金融计算工具。
 
 > [!NOTE]
-> 需要 AstrBot >=4.29.1,<5；工具名从 expression/compare 改为 math_eval/math_compare。
+> 运行要求：AstrBot >=4.29.1,<5。
 
 ## 快速开始
 
-1. 放入 AstrBot 插件目录
-2. 安装 requirements.txt
-3. 在配置里设置 dps（默认 20）
+1. 在插件市场搜索「数学工具集」安装，或从链接安装 `https://github.com/piexian/astrbot_plugin_mathitools`。
+2. 在插件配置中设置 `dps`（默认 20）。
+3. 直接让机器人计算，例如「算一下 sqrt(2)」。
 
 ## 功能一览
 
@@ -34,35 +34,25 @@ AstrBot 4.29.1+ 的 10 个数学 FunctionTool，基于 mpmath / asteval。
 
 ## 安全说明
 
-表达式经 AST 节点白名单校验，禁止 import/属性访问/字符串逃逸；限制长度 1000、AST 深度 10、列表 10000 元素、指数 10000、阶乘 300、单次超时 15s、结果字符串 10000 字符；符号表清空后只注入注册表；精度按调用隔离（mp.workdps），不写全局 mpmath 配置；无网络、无文件写入、无子进程。
+表达式使用 AST 白名单求值，限制长度、嵌套、指数、超时与结果大小；计算不访问网络、文件或子进程。
 
 ## 项目结构
-
 ```text
-main.py          # 插件入口：注册 10 个工具
-core/            # 纯计算层：注册表、安全校验、求值、单位、统计、矩阵、数论、金融
-schema.py        # schema 辅助，required 显式
-result.py        # JSON 字符串结果封装
-math_tools.py    # 10 个 FunctionTool
-tests/           # 离线单元测试
-.github/workflows/  # Tests（Python 3.12）与 CodeQL Advanced
+main.py                 # 插件入口
+core/                   # 计算层
+schema.py               # 工具参数定义
+result.py               # 结果封装
+math_tools.py           # 数学工具
+tests/                  # 测试
+.github/workflows/      # 自动化检查
+README.md
+CHANGELOG.md
+LICENSE
+metadata.yaml
+_conf_schema.json
+requirements.txt
+.gitignore
 ```
-
-## 二次开发
-
-- 环境：Python 3.12（CI）/ 3.13（本地），安装 requirements.txt
-- 测试：`python -B -m unittest discover -s tests -t . -v`
-- 新增函数/常量：改 `core/registry.py`，并补 `core/evaluator.py` 符号表与 `math_functions` 输出
-- 新增工具：改根目录 `math_tools.py`，在 `main.py` 注册，schema 显式 required
-- 错误契约：JSON 字符串，ok/error_code/hint/example/valid_options；失败用 `from astrbot.api import logger` 的 `logger.error`
-- 文档同步：改工具/函数/配置时同步 README、CHANGELOG.md、metadata.yaml、_conf_schema.json
-- 许可证：AGPL-3.0-or-later，修改与分发遵循 LICENSE
-
-## 开发验证
-
-`python -B -m unittest discover -s tests -t . -v`
-
-离线测试使用最小 AstrBot 桩，不替代真实实例加载。
 
 ## 更新日志
 
@@ -70,8 +60,8 @@ tests/           # 离线单元测试
 
 ## 相关链接
 
-- [AstrBot 文档](https://astrbot.app)
-- [AstrBot 插件开发文档](https://astrbot.app/dev/)
+- [AstrBot 文档](https://docs.astrbot.app/)
+- [上游仓库](https://github.com/NekoiMeiov/astrbot_plugin_mathitools)
 - [本仓库 Issues](https://github.com/piexian/astrbot_plugin_mathitools/issues)
 
 ## 许可

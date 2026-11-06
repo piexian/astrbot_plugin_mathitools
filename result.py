@@ -6,7 +6,7 @@ from typing import Any
 
 def ok_result(**fields: Any) -> str:
     """成功结果：{"ok": true, ...fields}。"""
-    return json.dumps({"ok": True, **fields}, ensure_ascii=False)
+    return json.dumps({"ok": True, **fields}, ensure_ascii=False, allow_nan=False)
 
 
 def error_result(
@@ -28,4 +28,4 @@ def error_result(
         payload["example"] = example
     if valid_options is not None:
         payload["valid_options"] = valid_options
-    return json.dumps(payload, ensure_ascii=False)
+    return json.dumps(payload, ensure_ascii=False, allow_nan=False)

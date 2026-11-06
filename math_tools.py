@@ -21,7 +21,7 @@ from .core.registry import (
     UNIT_ALIASES,
     UNIT_CONVERSIONS,
 )
-from .core.statistics import calculate_statistics
+from .core.statistics import calculate_statistics, valid_number
 from .core.units import convert_natural_language, convert_unit
 from .result import error_result, ok_result
 from .schema import (
@@ -78,9 +78,9 @@ def _require_str(kwargs: dict, key: str, example: str) -> str:
 
 def _require_number(kwargs: dict, key: str, example: str) -> float:
     value = kwargs.get(key)
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    if not valid_number(value):
         raise MathError(
-            f"{key} 必须是数字",
+            f"{key} 必须是有限数字",
             "invalid_argument",
             hint=f"缺少或非法参数 {key}",
             example=example,
@@ -281,11 +281,11 @@ class MathStatisticsTool(FunctionTool):
     )
 
     async def call(self, context: Any, **kwargs: Any) -> str:
-        operation = _require_str(kwargs, "operation", 'operation="mean", data=[1, 2, 3]')
-        return _run(
-            "math_statistics",
-            lambda: calculate_statistics(kwargs.get("data"), operation),
-        )
+        def work() -> Any:
+            operation = _require_str(kwargs, "operation", 'operation="mean", data=[1, 2, 3]')
+            return calculate_statistics(kwargs.get("data"), operation)
+
+        return _run("math_statistics", work)
 
 
 @dataclass
@@ -311,8 +311,13 @@ class MathMatrixTool(FunctionTool):
     )
 
     async def call(self, context: Any, **kwargs: Any) -> str:
-        operation = _require_str(kwargs, "operation", 'operation="determinant", matrices=[[[1, 2], [3, 4]]]')
-        return _run("math_matrix", lambda: matrix_operation(kwargs.get("matrices"), operation))
+        def work() -> Any:
+            operation = _require_str(
+                kwargs, "operation", 'operation="determinant", matrices=[[[1, 2], [3, 4]]]'
+            )
+            return matrix_operation(kwargs.get("matrices"), operation)
+
+        return _run("math_matrix", work)
 
 
 @dataclass
@@ -357,8 +362,11 @@ class MathNaturalLanguageUnitsTool(FunctionTool):
     )
 
     async def call(self, context: Any, **kwargs: Any) -> str:
-        query = _require_str(kwargs, "query", 'query="5 km to miles"')
-        return _run("math_nl_units", lambda: convert_natural_language(query))
+        def work() -> dict:
+            query = _require_str(kwargs, "query", 'query="5 km to miles"')
+            return convert_natural_language(query)
+
+        return _run("math_nl_units", work)
 
 
 @dataclass
@@ -378,11 +386,11 @@ class MathNumberTheoryTool(FunctionTool):
     )
 
     async def call(self, context: Any, **kwargs: Any) -> str:
-        operation = _require_str(kwargs, "operation", 'operation="prime_factors", number=360')
-        return _run(
-            "math_number_theory",
-            lambda: number_theory_operation(kwargs.get("number"), operation),
-        )
+        def work() -> Any:
+            operation = _require_str(kwargs, "operation", 'operation="prime_factors", number=360')
+            return number_theory_operation(kwargs.get("number"), operation)
+
+        return _run("math_number_theory", work)
 
 
 @dataclass
@@ -417,16 +425,17 @@ class MathFinanceTool(FunctionTool):
     )
 
     async def call(self, context: Any, **kwargs: Any) -> str:
-        operation = _require_str(kwargs, "operation", _FINANCE_EXAMPLE)
-        params = {key: value for key, value in kwargs.items() if key != "operation"}
-        try:
-            return ok_result(result=finance_operation(operation, **params))
-        except MathError as exc:
-            if exc.error_code == "invalid_argument" and exc.example is None:
-                exc.example = _FINANCE_EXAMPLE
-            return _math_error_response("math_finance", exc)
-        except Exception as exc:
-            return _unexpected_error_response("math_finance", exc)
+        def work() -> Any:
+            operation = _require_str(kwargs, "operation", _FINANCE_EXAMPLE)
+            params = {key: value for key, value in kwargs.items() if key != "operation"}
+            try:
+                return finance_operation(operation, **params)
+            except MathError as exc:
+                if exc.error_code == "invalid_argument" and exc.example is None:
+                    exc.example = _FINANCE_EXAMPLE
+                raise
+
+        return _run("math_finance", work)
 
 
 ALL_TOOLS: tuple[type[FunctionTool], ...] = (

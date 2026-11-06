@@ -1,4 +1,4 @@
-"""统计、矩阵、数论、金融运算测试。"""
+"""统计、矩阵、数论、金融、单位运算测试。"""
 
 import unittest
 
@@ -7,6 +7,7 @@ from astrbot_plugin_mathitools.core.finance import finance_operation
 from astrbot_plugin_mathitools.core.matrix import matrix_operation
 from astrbot_plugin_mathitools.core.number_theory import number_theory_operation
 from astrbot_plugin_mathitools.core.statistics import calculate_statistics
+from astrbot_plugin_mathitools.core.units import convert_natural_language, convert_unit
 
 
 class StatisticsTest(unittest.TestCase):
@@ -46,6 +47,20 @@ class StatisticsTest(unittest.TestCase):
         with self.assertRaises(MathError) as ctx:
             calculate_statistics(["a"], "mean")
         self.assertEqual(ctx.exception.error_code, "invalid_argument")
+
+    def test_non_finite_bool_and_overflow_rejected(self):
+        bad_data = [
+            [1, float("nan")],
+            [1, float("inf")],
+            [1, float("-inf")],
+            [1, True],
+            [1, [2]],
+            [10**400],  # 超出浮点表示范围
+        ]
+        for data in bad_data:
+            with self.assertRaises(MathError) as ctx:
+                calculate_statistics(data, "mean")
+            self.assertEqual(ctx.exception.error_code, "invalid_argument")
 
 
 class MatrixTest(unittest.TestCase):
@@ -94,6 +109,16 @@ class MatrixTest(unittest.TestCase):
         with self.assertRaises(MathError) as ctx:
             matrix_operation([[["a"]]], "rank")
         self.assertEqual(ctx.exception.error_code, "invalid_argument")
+
+    def test_non_finite_and_bool_elements_rejected(self):
+        for matrix in (
+            [[1, float("nan")], [3, 4]],
+            [[1, float("inf")], [3, 4]],
+            [[1, True], [3, 4]],
+        ):
+            with self.assertRaises(MathError) as ctx:
+                matrix_operation([matrix], "determinant")
+            self.assertEqual(ctx.exception.error_code, "invalid_argument")
 
     def test_unknown_operation(self):
         with self.assertRaises(MathError) as ctx:
@@ -215,6 +240,27 @@ class FinanceTest(unittest.TestCase):
             finance_operation("tip", amount=100)
         self.assertEqual(ctx.exception.error_code, "invalid_argument")
 
+    def test_string_and_non_finite_params_rejected(self):
+        for amount in ("100", float("nan"), float("inf"), True):
+            with self.assertRaises(MathError) as ctx:
+                finance_operation("tip", amount=amount, tip_percent=15)
+            self.assertEqual(ctx.exception.error_code, "invalid_argument")
+        with self.assertRaises(MathError) as ctx:
+            finance_operation("compound_interest", principal="1000", rate=5, time=2)
+        self.assertEqual(ctx.exception.error_code, "invalid_argument")
+
+class UnitsTest(unittest.TestCase):
+    def test_convert_unit_rejects_non_finite_and_bool(self):
+        for value in (float("nan"), float("inf"), float("-inf"), True):
+            with self.assertRaises(MathError) as ctx:
+                convert_unit(value, "km", "mi", "length")
+            self.assertEqual(ctx.exception.error_code, "invalid_argument")
+
+    def test_natural_language_overflow_rejected(self):
+        for query in ("1e309 km to miles", "-1e309 celsius to fahrenheit"):
+            with self.assertRaises(MathError) as ctx:
+                convert_natural_language(query)
+            self.assertEqual(ctx.exception.error_code, "invalid_argument")
 
 if __name__ == "__main__":
     unittest.main()

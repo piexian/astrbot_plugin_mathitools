@@ -4,6 +4,7 @@ import re
 
 from .errors import MathError
 from .registry import UNIT_ALIASES, UNIT_CONVERSIONS
+from .statistics import valid_number
 
 # 反向族：距离/体积（mpg、mpg_uk、km/L、mi/L），系数含义为「多少 mpg 当量」。
 _FUEL_INVERSE: frozenset[str] = frozenset({"mpg", "mpg_uk", "km/L", "mi/L"})
@@ -23,6 +24,12 @@ def convert_unit(
     value: float, from_unit: str, to_unit: str, unit_type: str
 ) -> float:
     """把 value 从 from_unit 换算到 to_unit；别名自动解析。"""
+    if not valid_number(value):
+        raise MathError(
+            "value 必须是有限数字",
+            "invalid_argument",
+            hint="不接受布尔值、NaN 或无穷大",
+        )
     conversions = UNIT_CONVERSIONS.get(unit_type)
     if conversions is None:
         raise MathError(
@@ -57,6 +64,13 @@ def convert_natural_language(query: str) -> dict:
             example="5 km to miles",
         )
     value = float(match.group(1))
+    if not valid_number(value):
+        raise MathError(
+            f"换算数值不是有限数字: {match.group(1)}",
+            "invalid_argument",
+            hint="数值必须是有限实数，拒绝 1e309 这类溢出",
+            example="5 km to miles",
+        )
     src_candidates = _candidates(match.group(2))
     dst_candidates = _candidates(match.group(3))
 

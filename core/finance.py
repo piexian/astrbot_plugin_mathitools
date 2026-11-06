@@ -3,7 +3,19 @@ simple_interest、loan_payment、split_bill、tax。"""
 
 from .errors import MathError
 from .registry import FINANCE_OPERATIONS
+from .statistics import valid_number
 
+
+_NUMERIC_PARAMS: dict[str, tuple[str, ...]] = {
+    "percentage": ("value", "percentage_value"),
+    "percentage_change": ("old_value", "new_value"),
+    "tip": ("amount", "tip_percent"),
+    "compound_interest": ("principal", "rate", "time"),
+    "simple_interest": ("principal", "rate", "time"),
+    "loan_payment": ("principal", "annual_rate", "years"),
+    "split_bill": ("total", "tip_percent"),
+    "tax": ("amount", "tax_rate"),
+}
 
 def finance_operation(operation: str, **params) -> dict | float:
     """按 operation 分发金融计算。"""
@@ -15,6 +27,14 @@ def finance_operation(operation: str, **params) -> dict | float:
             valid_options=list(FINANCE_OPERATIONS),
             example='finance_operation("tip", amount=100, tip_percent=15)',
         )
+    for name in _NUMERIC_PARAMS[operation]:
+        value = params.get(name)
+        if value is not None and not valid_number(value):
+            raise MathError(
+                f"{name} 必须是有限数字",
+                "invalid_argument",
+                hint="不接受字符串、布尔值、NaN 或无穷大",
+            )
     try:
         return _OPS[operation](**params)
     except TypeError as exc:

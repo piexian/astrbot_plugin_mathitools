@@ -79,6 +79,15 @@ def _call(tool, **kwargs):
     return json.loads(asyncio.run(tool.call(None, **kwargs)))
 
 
+def _reject_constant(name: str):
+    raise ValueError(f"JSON 含非有限数字面量: {name}")
+
+
+def _call_strict(tool, **kwargs):
+    """解析时拒绝 NaN/Infinity 字面量，任何工具输出都不允许出现。"""
+    return json.loads(asyncio.run(tool.call(None, **kwargs)), parse_constant=_reject_constant)
+
+
 def _all_tools():
     return [
         MathEvalTool(),
@@ -266,6 +275,91 @@ class ToolBehaviorTest(unittest.TestCase):
         _call(MathStatisticsTool(), operation="zz", data=[1])
         self.assertTrue(LOGGER.errors)
         self.assertIn("math_statistics", LOGGER.errors[0])
+
+
+class ToolValidationTest(unittest.TestCase):
+    """三态回归：非法输入必须落成 JSON 错误，输出不得含非有限数字面量。"""
+
+    def setUp(self):
+        LOGGER.errors.clear()
+
+    def test_missing_or_wrong_type_params_return_invalid_argument_json(self):
+        cases = [
+            (MathStatisticsTool(), dict(data=[1, 2, 3]), "缺 operation"),
+            (MathStatisticsTool(), dict(operation="mean"), "缺 data"),
+            (MathMatrixTool(), dict(matrices=[[[1, 2], [3, 4]]]), "缺 operation"),
+            (MathMatrixTool(), dict(operation="rank"), "缺 matrices"),
+            (MathNaturalLanguageUnitsTool(), dict(), "缺 query"),
+            (MathNaturalLanguageUnitsTool(), dict(query=123), "query 类型错"),
+            (MathNumberTheoryTool(), dict(number=360), "缺 operation"),
+            (MathUnitsTool(), dict(from_unit="km", to_unit="mi", unit_type="length"), "缺 value"),
+            (
+                MathUnitsTool(),
+                dict(value="5", from_unit="km", to_unit="mi", unit_type="length"),
+                "value 类型错",
+            ),
+            (MathFinanceTool(), dict(), "缺 operation"),
+            (MathFinanceTool(), dict(operation=123), "operation 类型错"),
+        ]
+        for tool, kwargs, label in cases:
+            payload = _call_strict(tool, **kwargs)
+            self.assertFalse(payload["ok"], label)
+            self.assertEqual(payload["error_code"], "invalid_argument", label)
+
+    def test_number_theory_missing_number_returns_json_error(self):
+        payload = _call_strict(MathNumberTheoryTool(), operation="is_prime")
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["error_code"], "non_integer")
+
+    def test_statistics_rejects_nan_inf_bool_nested_data(self):
+        for data in ([1, float("nan")], [1, float("inf")], [1, float("-inf")], [1, True], [1, [2]]):
+            payload = _call_strict(MathStatisticsTool(), operation="mean", data=data)
+            self.assertFalse(payload["ok"])
+            self.assertEqual(payload["error_code"], "invalid_argument")
+
+    def test_units_rejects_nan_inf_bool_value(self):
+        for value in (float("nan"), float("inf"), float("-inf"), True):
+            payload = _call_strict(
+                MathUnitsTool(), value=value, from_unit="km", to_unit="mi", unit_type="length"
+            )
+            self.assertFalse(payload["ok"])
+            self.assertEqual(payload["error_code"], "invalid_argument")
+
+    def test_nl_units_rejects_overflow_query(self):
+        for query in ("1e309 km to miles", "-1e309 km to miles"):
+            payload = _call_strict(MathNaturalLanguageUnitsTool(), query=query)
+            self.assertFalse(payload["ok"])
+            self.assertEqual(payload["error_code"], "invalid_argument")
+
+    def test_finance_rejects_string_and_non_finite_amounts(self):
+        for amount in ("100", float("nan"), float("inf"), True):
+            payload = _call_strict(MathFinanceTool(), operation="tip", amount=amount, tip_percent=15)
+            self.assertFalse(payload["ok"])
+            self.assertEqual(payload["error_code"], "invalid_argument")
+            self.assertIn("tip", payload["example"])
+
+        payload = _call_strict(
+            MathFinanceTool(), operation="compound_interest", principal="1000", rate=5, time=2
+        )
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["error_code"], "invalid_argument")
+
+    def test_success_payloads_contain_no_non_finite_literals(self):
+        cases = [
+            (MathEvalTool(), dict(expression="1+2")),
+            (MathCompareTool(), dict(left="2^10", right="1000")),
+            (MathBatchTool(), dict(expressions=["1+1", "sqrt(2)"])),
+            (MathFunctionsTool(), dict()),
+            (MathStatisticsTool(), dict(operation="mean", data=[1, 2, 3])),
+            (MathMatrixTool(), dict(operation="determinant", matrices=[[[1, 2], [3, 4]]])),
+            (MathUnitsTool(), dict(value=5, from_unit="km", to_unit="mi", unit_type="length")),
+            (MathNaturalLanguageUnitsTool(), dict(query="5 km to miles")),
+            (MathNumberTheoryTool(), dict(operation="is_prime", number=7)),
+            (MathFinanceTool(), dict(operation="tip", amount=100, tip_percent=15)),
+        ]
+        for tool, kwargs in cases:
+            payload = _call_strict(tool, **kwargs)
+            self.assertTrue(payload["ok"], tool.name)
 
 
 if __name__ == "__main__":
