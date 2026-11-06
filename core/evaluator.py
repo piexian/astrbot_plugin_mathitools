@@ -33,6 +33,7 @@ MAX_FACTORIAL_ARGUMENT = 300
 _MAX_INT_DIGITS = 10000
 _MAX_INTEGER_MAGNITUDE = 10**_MAX_INT_DIGITS
 
+_MAX_INTEGER_BITS = _MAX_INTEGER_MAGNITUDE.bit_length()
 
 def _safe_factorial(x: Any) -> Any:
     if x > MAX_FACTORIAL_ARGUMENT:
@@ -72,7 +73,11 @@ def _check_integer_budget(value: Any) -> None:
             hint=f"整数结果位数不能超过 {_MAX_INT_DIGITS}",
         )
     if isinstance(value, (float, mpmath.mpf)) and mpmath.isfinite(value):
-        if mpmath.mpf(abs(value)) >= _MAX_INTEGER_MAGNITUDE:
+        # 普通浮点结果先按二进制量级排除，避免反复转换 10**10000。
+        magnitude = mpmath.mag(value)
+        if magnitude < _MAX_INTEGER_BITS - 1:
+            return
+        if magnitude >= _MAX_INTEGER_BITS or mpmath.mpf(abs(value)) >= _MAX_INTEGER_MAGNITUDE:
             raise MathError(
                 "结果过大，超出输出上限",
                 "result_too_large",
@@ -299,6 +304,17 @@ def evaluate(
     expression: str, dps: int = DEFAULT_DPS, timeout_seconds: float = EVAL_TIMEOUT_SECONDS
 ) -> str:
     """校验并在隔离精度下求值表达式，返回结果字符串。"""
+    return _evaluate(expression, dps, timeout_seconds, raw=False)
+
+
+def evaluate_value(
+    expression: str, dps: int = DEFAULT_DPS, timeout_seconds: float = EVAL_TIMEOUT_SECONDS
+) -> Any:
+    """校验并在隔离精度下求值表达式，返回未经格式化的数值。"""
+    return _evaluate(expression, dps, timeout_seconds, raw=True)
+
+
+def _evaluate(expression: str, dps: int, timeout_seconds: float, raw: bool) -> Any:
     if not isinstance(dps, int) or isinstance(dps, bool) or not (MIN_DPS <= dps <= MAX_DPS):
         raise MathError(
             f"dps 必须是 {MIN_DPS}..{MAX_DPS} 的整数",
@@ -310,7 +326,7 @@ def evaluate(
 
     outcome: dict[str, Any] = {}
     worker = threading.Thread(
-        target=_evaluate_in_thread, args=(expression, dps, outcome), daemon=True
+        target=_evaluate_in_thread, args=(expression, dps, outcome, raw), daemon=True
     )
     worker.start()
     worker.join(timeout_seconds)
@@ -325,9 +341,9 @@ def evaluate(
     return outcome["value"]
 
 
-def _evaluate_in_thread(expression: str, dps: int, outcome: dict[str, Any]) -> None:
+def _evaluate_in_thread(expression: str, dps: int, outcome: dict[str, Any], raw: bool) -> None:
     try:
-        outcome["value"] = _evaluate_sync(expression, dps)
+        outcome["value"] = _evaluate_sync(expression, dps, raw)
     except MathError as exc:
         outcome["error"] = exc
     except Exception as exc:  # 兜底：底层异常不裸抛，统一映射错误码
@@ -390,7 +406,7 @@ class _BudgetInterpreter(Interpreter):
         return result
 
 
-def _evaluate_sync(expression: str, dps: int) -> str:
+def _evaluate_sync(expression: str, dps: int, raw: bool = False) -> Any:
     with mp.workdps(dps):
         interpreter = _BudgetInterpreter(writer=io.StringIO())
         interpreter.symtable.clear()
@@ -398,7 +414,7 @@ def _evaluate_sync(expression: str, dps: int) -> str:
         value = interpreter.eval(security.preprocess_caret(expression))
         if interpreter.error:
             raise _map_asteval_error(interpreter.error[0])
-        return format_result(value, dps)
+        return value if raw else format_result(value, dps)
 
 
 def _map_asteval_error(holder: Any) -> MathError:

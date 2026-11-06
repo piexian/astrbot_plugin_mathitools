@@ -234,7 +234,7 @@ class ErrorMappingTest(unittest.TestCase):
         expect_error(self, "2**(10**6)", "exponent_too_large")
 
     def test_timeout(self):
-        def slow(expression, dps):
+        def slow(*args):
             time.sleep(1)
 
         with mock.patch.object(evaluator, "_evaluate_sync", slow):

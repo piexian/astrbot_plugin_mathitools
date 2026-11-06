@@ -125,6 +125,18 @@ class IntegrateTest(unittest.TestCase):
         result = _run("integrate", expression="abs(x)", a=-1, b=1, points=[0])
         self.assertAlmostEqual(float(result), 1.0, places=12)
 
+    def test_integral_two_narrow_peaks_at_default_dps(self):
+        result = _run(
+            "integrate",
+            expression="exp(-100*(x-3)^2)+exp(-100*(x-7)^2)",
+            a=0,
+            b=10,
+            points=[3, 7],
+        )
+        with mp.workdps(50):
+            expected = mp.sqrt(mp.pi) / 5
+            self.assertLess(abs(mp.mpf(result) - expected), mp.mpf("1e-19"))
+
     def test_integral_tiny_interval(self):
         result = _run("integrate", expression="x^2", a=0, b=1e-300)
         with mp.workdps(80):
@@ -302,6 +314,18 @@ class PolyRootsTest(unittest.TestCase):
         self.assertAlmostEqual(roots[1].real, 2 ** 0.5, places=12)
         for root in roots:
             self.assertAlmostEqual(root.imag, 0, places=12)
+
+    def test_polyroots_repeated_real_roots_are_clean(self):
+        result = _run("polyroots", coefficients=[1, -6, 11, -6])
+        self.assertEqual(sorted(result), ["1", "2", "3"])
+
+    def test_polyroots_small_complex_roots_are_kept(self):
+        result = _run("polyroots", coefficients=[1, 0, 1e-40], dps=60)
+        self.assertEqual(len(result), 2)
+        for entry in result:
+            root = complex(entry.replace(" ", ""))
+            self.assertNotEqual(root.imag, 0)
+            self.assertAlmostEqual(abs(root.imag), 1e-20, places=25)
 
     def test_polyroots_conjugate_roots(self):
         result = _run("polyroots", coefficients=[1, 0, 1])

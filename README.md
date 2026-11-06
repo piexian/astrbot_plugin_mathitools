@@ -27,6 +27,10 @@
 | math_finance | 金融计算（百分比/小费/利息/贷款/分摊/税费等 8 种） |
 | math_numerical | 数值求根/微分/定积分/概率分布（findroot / polyroots / differentiate / integrate / normal_* / binomial_* / poisson_*，13 项运算） |
 
+比较：math_compare 使用未格式化数值判断大小，left/right 仅为按 dps 格式化的展示字符串；NaN/Infinity 报 domain_error。
+
+金融扩展：loan_payment 传 principal/annual_rate/years（可选 payments_per_year）；split_bill 传 total/people（可选 tip_percent）。
+
 统计扩展：weighted_mean 通过 weights 传入权重（同长、可为负但和非零）；covariance、correlation、linear_regression 通过 data2 传入第二组数据，data 为 x、data2 为 y。covariance 为样本协方差（n-1），correlation 为 Pearson 相关，linear_regression 返回 slope/intercept。percentile 的 p 取 0..100（含端点）线性插值。每组数据/权重至多 10000 个有限数。
 
 矩阵扩展：solve 通过 matrices=[A, b] 传入方阵 A 与列矩阵 b，求解 Ax=b；A 最多 50 阶，返回解的列矩阵。如 operation="solve"、matrices=[[[2,1],[1,-1]],[[5],[1]]] 返回 [[2.0],[1.0]]。
@@ -46,7 +50,7 @@
 ## 安全与 Benchmark
 
 表达式使用 AST 白名单且不能访问网络、文件或启动子进程；math_numerical 工作进程限制墙钟 15 秒、最多 2 并发、积分 2048 次求值，生产限额为 Linux 256MiB 地址空间与 10 秒 CPU、Windows 256MiB 提交内存与 10 秒用户态 CPU、macOS 启动 VMS 基线追加 128MiB 地址空间与 10 秒 CPU，聚合与舍入仍按 Python 3.12 语义并限制列表、整数和输出大小。
-[benchmark.yml](.github/workflows/benchmark.yml) 在 Ubuntu/Windows/macOS 原生运行，真实加载 AstrBot、注册 11 个工具并执行 9 次调用，验证限额、超时取消回收和错误恢复，结果见 CI artifacts。
+[benchmark.yml](.github/workflows/benchmark.yml) 在 Ubuntu/Windows/macOS 原生运行，真实加载 AstrBot、注册 11 个工具并执行 32 项检查（含 15 路并发），验证限额、超时取消回收和错误恢复，结果见 CI artifacts。失败日志包含截断后的调用参数，批量单项日志包含索引与表达式。
 
 ## 项目结构
 ```text

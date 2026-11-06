@@ -445,8 +445,11 @@ def _polyroots(packet) -> list[str]:
                     "domain_error",
                     hint="结果不能是 NaN 或 Infinity",
                 )
-            if mp.im(root) == 0:
-                root = mp.re(root)
+            real = mp.re(root)
+            imag = mp.im(root)
+            # 只清理相对实部处于工作精度噪声内的虚部，不做绝对值截断。
+            if imag == 0 or (real != 0 and abs(imag) <= abs(real) * mp.eps):
+                root = real
             out.append(format_result(root, dps))
         out.extend(format_result(mp.mpf(0), dps) for _ in range(zero_count))
     if len(json.dumps(out, ensure_ascii=False)) > MAX_RESULT_LENGTH:

@@ -269,6 +269,46 @@ async def run_probe(args: argparse.Namespace) -> dict:
                 "math_eval", {"expression": "2+3"},
                 lambda p: p.get("ok") and p.get("result") == "5",
             ),
+            (
+                "math_finance",
+                {"operation": "loan_payment", "principal": 1200, "annual_rate": 0, "years": 1},
+                lambda p: p.get("ok") and p.get("result", {}).get("payment") == 100,
+            ),
+            (
+                "math_finance",
+                {"operation": "split_bill", "total": 100, "people": 4, "tip_percent": 10},
+                lambda p: p.get("ok") and p.get("result", {}).get("per_person") == 27.5,
+            ),
+            (
+                "math_compare", {"left": "nan", "right": "1"},
+                lambda p: not p.get("ok") and p.get("error_code") == "domain_error",
+            ),
+            (
+                "math_compare", {"left": "pi", "right": "3.1416", "dps": 5},
+                lambda p: p.get("ok") and p.get("result", {}).get("comparison") == "<",
+            ),
+            (
+                "math_compare", {"left": "pi + 1e-20", "right": "pi", "dps": 30},
+                lambda p: p.get("ok") and p.get("result", {}).get("comparison") == ">",
+            ),
+            (
+                "math_numerical", {"operation": "polyroots", "coefficients": [1, -6, 11, -6]},
+                lambda p: p.get("ok") and sorted(p.get("result", [])) == ["1", "2", "3"],
+            ),
+            (
+                "math_numerical",
+                {
+                    "operation": "integrate",
+                    "expression": "exp(-100*(x-3)^2)+exp(-100*(x-7)^2)",
+                    "a": 0, "b": 10, "points": [3, 7],
+                },
+                lambda p: p.get("ok") and abs(float(p["result"]) - 0.3544907701811032) < 1e-18,
+            ),
+            (
+                "math_units",
+                {"value": "bad", "from_unit": "hp", "to_unit": "kW", "unit_type": "power"},
+                lambda p: not p.get("ok") and p.get("error_code") == "invalid_argument",
+            ),
         ]
         results = []
         for tool_name, params, check in cases:
@@ -283,6 +323,40 @@ async def run_probe(args: argparse.Namespace) -> dict:
                 "passed": bool(check(payload)),
             })
 
+        parallel_cases = [
+            ("math_eval", {"expression": "1+2"}, "3"),
+            ("math_compare", {"left": "pi", "right": "3.1416", "dps": 5}, None),
+            ("math_batch", {"expressions": ["1+1", "sqrt(2)"]}, None),
+            ("math_functions", {}, None),
+            ("math_statistics", {"operation": "mean", "data": [1, 2, 3]}, 2),
+            ("math_matrix", {"operation": "determinant", "matrices": [[[1, 2], [3, 4]]]}, -2),
+            ("math_numerical", {"operation": "normal_cdf", "x": 0}, "0.5"),
+            ("math_units", {"value": 1, "from_unit": "hp", "to_unit": "kW", "unit_type": "power"}, 0.7457),
+            ("math_units", {"value": 1, "from_unit": "kgf", "to_unit": "N", "unit_type": "force"}, 9.80665),
+            ("math_nl_units", {"query": "5 km to miles"}, None),
+            ("math_number_theory", {"operation": "is_prime", "number": 17}, True),
+            ("math_finance", {"operation": "split_bill", "total": 100, "people": 4}, None),
+            ("math_eval", {"expression": "gamma(0.5)"}, None),
+            ("math_statistics", {"operation": "variance", "data": [1, 2, 3]}, 1),
+            ("math_units", {"value": 0, "from_unit": "C", "to_unit": "K", "unit_type": "temperature"}, 273.15),
+        ]
+        started = time.perf_counter()
+        parallel_payloads = await asyncio.gather(
+            *(invoke(tool_name, params) for tool_name, params, _ in parallel_cases)
+        )
+        elapsed = time.perf_counter() - started
+        for (tool_name, params, expected), payload in zip(parallel_cases, parallel_payloads):
+            results.append({
+                "tool": tool_name,
+                "params": params,
+                "actual": payload,
+                "parallel": True,
+                "elapsed_seconds": round(elapsed, 6),
+                "passed": bool(
+                    payload.get("ok")
+                    and (expected is None or payload.get("result") == expected)
+                ),
+            })
 
         cancellation = await run_cancellation_case(invoke)
         results.append(cancellation)

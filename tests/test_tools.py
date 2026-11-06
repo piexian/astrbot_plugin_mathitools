@@ -181,6 +181,8 @@ class ToolBehaviorTest(unittest.TestCase):
         self.assertEqual(results[1]["error_code"], "unknown_function")
         self.assertTrue(results[2]["ok"])
         self.assertEqual(results[2]["result"], "6")
+        self.assertIn("index=1", LOGGER.errors[-1])
+        self.assertIn("expression='foo(1)'", LOGGER.errors[-1])
 
     def test_math_functions_counts(self):
         payload = _call(MathFunctionsTool())
@@ -203,6 +205,25 @@ class ToolBehaviorTest(unittest.TestCase):
         payload = _call(MathCompareTool(), left="2^10", right="1000")
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["result"]["comparison"], ">")
+
+    def test_math_compare_uses_unformatted_values(self):
+        payload = _call(MathCompareTool(), left="pi", right="3.1416", dps=5)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"]["comparison"], "<")
+        self.assertIsInstance(payload["result"]["left"], str)
+
+        payload = _call(
+            MathCompareTool(), left="pi + 1e-20", right="pi", dps=30
+        )
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"]["comparison"], ">")
+
+    def test_math_compare_non_finite_rejected(self):
+        for expression in ("nan", "inf", "-inf"):
+            with self.subTest(expression=expression):
+                payload = _call_strict(MathCompareTool(), left=expression, right="1")
+                self.assertFalse(payload["ok"])
+                self.assertEqual(payload["error_code"], "domain_error")
 
     def test_math_compare_complex_rejected(self):
         payload = _call(MathCompareTool(), left="sqrt(-1)", right="1")
@@ -469,10 +490,28 @@ class ToolBehaviorTest(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertAlmostEqual(payload["result"]["total_amount"], 115.0, places=12)
 
+    def test_math_finance_schema_named_operations_ok(self):
+        tool = MathFinanceTool()
+        properties = tool.parameters["properties"]
+        self.assertIn("annual_rate", properties)
+        self.assertIn("total", properties)
+        self.assertNotIn("split_bill", properties["principal"]["description"])
+
+        loan = _call(
+            tool, operation="loan_payment", principal=1200, annual_rate=0, years=1
+        )
+        split = _call(tool, operation="split_bill", total=100, people=4, tip_percent=10)
+        self.assertTrue(loan["ok"])
+        self.assertEqual(loan["result"]["payment"], 100)
+        self.assertTrue(split["ok"])
+        self.assertEqual(split["result"]["per_person"], 27.5)
+
     def test_logger_error_called_on_failure(self):
         _call(MathStatisticsTool(), operation="zz", data=[1])
         self.assertTrue(LOGGER.errors)
         self.assertIn("math_statistics", LOGGER.errors[0])
+        self.assertIn("operation='zz'", LOGGER.errors[0])
+        self.assertIn("data=<list len=1>", LOGGER.errors[0])
 
 
 class ToolValidationTest(unittest.TestCase):
