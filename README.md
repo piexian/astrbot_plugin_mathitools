@@ -43,15 +43,10 @@
 |---|---|---|---|
 | dps | int | 20 | 计算精度，范围 1..200 |
 
-## 安全说明
+## 安全与 Benchmark
 
-表达式使用 AST 白名单求值，限制长度、嵌套、指数、超时与结果大小；表达式不能访问网络、文件或启动子进程。
-math_numerical 工具为计算启动受限工作进程：墙钟 15 秒、最多 2 并发，积分总求值限 2048 次，取消和超时后即时回收。生产限额：Linux 为 256MiB 地址空间与 10 秒 CPU；Windows 为 256MiB 提交内存与 10 秒用户态 CPU；macOS 按每个工作进程启动时实测的 VMS 基线追加 128MiB 地址空间与 10 秒 CPU。
-聚合与舍入函数 sum/prod/min/max/round 与 Python 3.12 语义一致，round 为半偶数舍入，ndigits 取 -10000..10000；列表按嵌套元素总数限 10000，prod 中间值与整数输出限 10000 位，总输出最多 10000 字符。
-
-## Benchmark
-
-[benchmark.yml](.github/workflows/benchmark.yml) 在 Ubuntu/Windows/macOS 原生运行预检：记录内存基线，验证 CPU/内存限额，并真实加载 AstrBot、注册 11 个数学工具并执行 9 次冒烟调用，报告见 CI artifacts。Windows 探针复用同一生产资源限额模块；macOS 生产限额由同一工作进程在原生 macOS 上自行设置。
+表达式使用 AST 白名单且不能访问网络、文件或启动子进程；math_numerical 工作进程限制墙钟 15 秒、最多 2 并发、积分 2048 次求值，生产限额为 Linux 256MiB 地址空间与 10 秒 CPU、Windows 256MiB 提交内存与 10 秒用户态 CPU、macOS 启动 VMS 基线追加 128MiB 地址空间与 10 秒 CPU，聚合与舍入仍按 Python 3.12 语义并限制列表、整数和输出大小。
+[benchmark.yml](.github/workflows/benchmark.yml) 在 Ubuntu/Windows/macOS 原生运行，真实加载 AstrBot、注册 11 个工具并执行 9 次调用，验证限额、超时取消回收和错误恢复，结果见 CI artifacts。
 
 ## 项目结构
 ```text
