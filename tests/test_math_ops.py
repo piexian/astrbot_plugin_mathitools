@@ -1,9 +1,13 @@
 """统计、矩阵、数论、金融、单位运算测试。"""
 
+import copy
 import decimal
 import math
 import statistics
+import sys
 import unittest
+
+from mpmath import mp
 
 from astrbot_plugin_mathitools.core.errors import MathError
 from astrbot_plugin_mathitools.core.finance import finance_operation
@@ -281,6 +285,112 @@ class MatrixTest(unittest.TestCase):
             matrix_operation([[[1]]], "zz")
         self.assertEqual(ctx.exception.error_code, "unknown_operation")
 
+
+    def test_solve_normal(self):
+        self.assertEqual(matrix_operation([[[2, 1], [1, -1]], [[5], [1]]], "solve"), [[2.0], [1.0]])
+        self.assertEqual(matrix_operation([[[0, 2], [1, 1]], [[4], [3]]], "solve"), [[1.0], [2.0]])
+        self.assertEqual(matrix_operation([[[4]], [[12]]], "solve"), [[3.0]])
+        self.assertEqual(matrix_operation([[[2, 1], [1, -1]], [[0], [0]]], "solve"), [[0.0], [0.0]])
+
+    def test_solve_inputs_unchanged_and_column_shape(self):
+        matrices = [[[2, 1], [1, -1]], [[5], [1]]]
+        before = copy.deepcopy(matrices)
+        result = matrix_operation(matrices, "solve")
+        self.assertEqual(result, [[2.0], [1.0]])
+        self.assertEqual(matrices, before)
+        self.assertEqual([len(row) for row in result], [1, 1])
+
+    def test_solve_big_int_precision(self):
+        big = 10**307
+        result = matrix_operation(
+            [[[big, big + 1], [big + 1, big + 2]], [[3 * big + 2], [3 * big + 5]]], "solve"
+        )
+        self.assertEqual(result, [[1.0], [2.0]])
+
+    def test_solve_extreme_scales(self):
+        biggest = sys.float_info.max
+        tiniest = math.ulp(0.0)
+        result = matrix_operation(
+            [[[biggest, 0], [0, tiniest]], [[biggest], [tiniest]]], "solve"
+        )
+        self.assertEqual(result, [[1.0], [1.0]])
+        result = matrix_operation(
+            [[[tiniest, biggest], [tiniest, -biggest]], [[biggest], [-biggest]]], "solve"
+        )
+        self.assertEqual(result, [[0.0], [1.0]])
+
+    def test_solve_shape_and_param_errors(self):
+        cases = [
+            ([[[1, 2, 3], [4, 5, 6]], [[1], [2]]], "matrix_dimension"),
+            ([[[1, 2], [3, 4]], [[1], [2], [3]]], "matrix_dimension"),
+            ([[[1, 2], [3, 4]], [[1, 2], [3, 4]]], "matrix_dimension"),
+            ([[[1, 2], [3, 4]]], "invalid_argument"),
+            ([[[1, 2], [3, 4]], [[1], [2]], [[1], [2]]], "invalid_argument"),
+            ([[], [[1]]], "invalid_argument"),
+            ([1, [[1]]], "invalid_argument"),
+            ([[[1, 2], [3]], [[1], [2]]], "invalid_argument"),
+            ([[[1, 2], [3, 4]], [1, 2]], "invalid_argument"),
+        ]
+        for matrices, code in cases:
+            with self.subTest(matrices=matrices):
+                with self.assertRaises(MathError) as ctx:
+                    matrix_operation(matrices, "solve")
+                self.assertEqual(ctx.exception.error_code, code)
+
+    def test_solve_element_and_size_errors(self):
+        bad_values = [True, float("nan"), float("inf"), 10**400]
+        cases = [
+            [[[v, 1], [3, 4]], [[1], [2]]] for v in bad_values
+        ] + [
+            [[[1, 2], [3, 4]], [[v], [2]]] for v in bad_values
+        ]
+        for matrices in cases:
+            with self.subTest(matrices=matrices):
+                with self.assertRaises(MathError) as ctx:
+                    matrix_operation(matrices, "solve")
+                self.assertEqual(ctx.exception.error_code, "invalid_argument")
+        big51 = [[1] * 51] * 51
+        with self.assertRaises(MathError) as ctx:
+            matrix_operation([big51, [[1]] * 51], "solve")
+        self.assertEqual(ctx.exception.error_code, "invalid_argument")
+        with self.assertRaises(MathError) as ctx:
+            matrix_operation([[[1, 2], [3, 4]], [[1]] * 51], "solve")
+        self.assertEqual(ctx.exception.error_code, "invalid_argument")
+        wide_a = [[1] * 51]
+        with self.assertRaises(MathError) as ctx:
+            matrix_operation([wide_a, [[1]]], "solve")
+        self.assertEqual(ctx.exception.error_code, "invalid_argument")
+
+    def test_solve_singular(self):
+        for a, b in (
+            ([[1, 2], [2, 4]], [[3], [6]]),
+            ([[1, 2], [2, 4]], [[3], [7]]),
+            ([[0]], [[0]]),
+            ([[0]], [[1]]),
+        ):
+            with self.subTest(a=a, b=b):
+                with self.assertRaises(MathError) as ctx:
+                    matrix_operation([a, b], "solve")
+                self.assertEqual(ctx.exception.error_code, "singular_matrix")
+
+    def test_solve_unrepresentable_solution(self):
+        tiniest = math.ulp(0.0)
+        biggest = sys.float_info.max
+        with self.assertRaises(MathError) as ctx:
+            matrix_operation([[[tiniest]], [[biggest]]], "solve")
+        self.assertEqual(ctx.exception.error_code, "domain_error")
+
+    def test_solve_mp_dps_isolated(self):
+        before = mp.dps
+        with mp.workdps(7):
+            self.assertEqual(
+                matrix_operation([[[2, 1], [1, -1]], [[5], [1]]], "solve"), [[2.0], [1.0]]
+            )
+            self.assertEqual(mp.dps, 7)
+            with self.assertRaises(MathError):
+                matrix_operation([[[1, 2], [2, 4]], [[3], [7]]], "solve")
+            self.assertEqual(mp.dps, 7)
+        self.assertEqual(mp.dps, before)
 
 class NumberTheoryTest(unittest.TestCase):
     def test_is_prime(self):

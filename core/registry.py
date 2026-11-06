@@ -75,6 +75,7 @@ STATISTICS_OPERATIONS: tuple[str, ...] = STATISTICS_FUNCTIONS + (
 
 MATRIX_OPERATIONS: tuple[str, ...] = (
     "multiply", "determinant", "inverse", "transpose", "rank",
+    "solve",
 )
 
 NUMBER_THEORY_OPERATIONS: tuple[str, ...] = (

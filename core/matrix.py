@@ -1,12 +1,18 @@
-"""矩阵运算：multiply、determinant、inverse、transpose、rank。"""
+"""矩阵运算：multiply、determinant、inverse、transpose、rank、solve。"""
+
+from mpmath import mp
 
 from .errors import MathError
 from .registry import MATRIX_OPERATIONS
 from .statistics import valid_number
 
+_MAX_SOLVE_SIZE = 50
+# 有限浮点数尺度跨度约 632 个十进制量级，LU 求解需要额外精度。
+_SOLVE_DPS = 700
+
 
 def matrix_operation(matrices: list, operation: str):
-    """对 1 个（或乘法所需的 2 个）矩阵执行指定运算。"""
+    """对 1 个（或乘法/求解所需的 2 个）矩阵执行指定运算。"""
     if operation not in MATRIX_OPERATIONS:
         raise MathError(
             f"未知矩阵运算: {operation}",
@@ -19,7 +25,18 @@ def matrix_operation(matrices: list, operation: str):
         raise MathError(
             "matrices 必须是非空矩阵列表",
             "invalid_argument",
-            hint="multiply 需要两个矩阵，其余运算需要一个矩阵",
+            hint="multiply 和 solve 需要两个矩阵，其余运算需要一个矩阵",
+        )
+    if operation == "solve":
+        if len(matrices) != 2:
+            raise MathError(
+                "solve 需要恰好两个矩阵",
+                "invalid_argument",
+                hint='matrix_operation([A, b], "solve")',
+            )
+        return _solve(
+            _validate(matrices[0], max_size=_MAX_SOLVE_SIZE, convert_to_float=False),
+            _validate(matrices[1], max_size=_MAX_SOLVE_SIZE, convert_to_float=False),
         )
 
     if operation == "multiply":
@@ -47,12 +64,21 @@ def matrix_operation(matrices: list, operation: str):
     return _rank(matrix)
 
 
-def _validate(matrix) -> list[list[float]]:
+def _validate(matrix, *, max_size=None, convert_to_float=True) -> list[list[int | float]]:
     if not isinstance(matrix, list) or len(matrix) == 0:
         raise MathError(
             "矩阵必须是非空列表的列表",
             "invalid_argument",
             hint="矩阵形如 [[1, 2], [3, 4]]",
+        )
+    if max_size is not None and (
+        len(matrix) > max_size
+        or any(isinstance(row, list) and len(row) > max_size for row in matrix)
+    ):
+        raise MathError(
+            f"矩阵规模超过上限 {max_size}x{max_size}",
+            "invalid_argument",
+            hint=f"solve 最多支持 {max_size} 阶方阵",
         )
     if not all(isinstance(row, list) and len(row) > 0 for row in matrix):
         raise MathError(
@@ -75,6 +101,8 @@ def _validate(matrix) -> list[list[float]]:
                     "invalid_argument",
                     hint="不接受字符串、布尔值、NaN 或无穷大",
                 )
+    if not convert_to_float:
+        return matrix
     return [[float(entry) for entry in row] for row in matrix]
 
 
@@ -183,3 +211,40 @@ def _echelon(matrix: list[list[float]]):
             ]
         pivots += 1
     return grid, swaps, pivots
+
+
+def _solve(a, b):
+    """高精度 LU 求解线性方程组 Ax=b，输入已校验。"""
+    n = len(a)
+    if len(a[0]) != n:
+        raise MathError(
+            "A 必须是方阵",
+            "matrix_dimension",
+            hint=f"solve 需要 n x n 方阵，当前为 {n}x{len(a[0])}",
+        )
+    if len(b) != n or any(len(row) != 1 for row in b):
+        raise MathError(
+            "b 必须是 n 行 1 列的列向量",
+            "matrix_dimension",
+            hint=f"A 为 {n}x{n}，b 应为 [[b1], ..., [b{n}]]",
+        )
+    ctx = mp.clone()
+    ctx.dps = _SOLVE_DPS
+    try:
+        solution = ctx.lu_solve(a, b)
+    except ZeroDivisionError as exc:
+        raise MathError(
+            "矩阵数值奇异，无法求解",
+            "singular_matrix",
+            hint="A 可能奇异或病态，当前数值精度下无法求解",
+        ) from exc
+    result = [[float(solution[i])] for i in range(n)]
+    for row in result:
+        for value in row:
+            if not valid_number(value):
+                raise MathError(
+                    "解超出有限数值范围",
+                    "domain_error",
+                    hint="解不能是 NaN 或 Infinity",
+                )
+    return result

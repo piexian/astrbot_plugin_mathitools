@@ -20,13 +20,15 @@
 | math_batch | 批量求值，单项失败落在该项，不中断整批 |
 | math_functions | 列出函数、常量、单位、别名与各类 operation 清单 |
 | math_statistics | 统计运算（15 种，支持加权平均、百分位与协方差/相关/回归） |
-| math_matrix | 矩阵运算（multiply/determinant/inverse/transpose/rank） |
+| math_matrix | 矩阵运算（multiply/determinant/inverse/transpose/rank/solve） |
 | math_units | 单位换算（15 类 158 单位 + 153 别名，温度为仿射换算） |
 | math_nl_units | 自然语言单位换算，如 "5 km to miles" |
 | math_number_theory | 数论运算（is_prime/prime_factors/divisors/totient） |
 | math_finance | 金融计算（百分比/小费/利息/贷款/分摊/税费等 8 种） |
 
 统计扩展：weighted_mean 通过 weights 传入权重（同长、可为负但和非零）；covariance、correlation、linear_regression 通过 data2 传入第二组数据，data 为 x、data2 为 y。covariance 为样本协方差（n-1），correlation 为 Pearson 相关，linear_regression 返回 slope/intercept。percentile 的 p 取 0..100（含端点）线性插值。每组数据/权重至多 10000 个有限数。
+
+矩阵扩展：solve 通过 matrices=[A, b] 传入方阵 A 与列矩阵 b，求解 Ax=b；A 最多 50 阶，返回解的列矩阵。如 operation="solve"、matrices=[[[2,1],[1,-1]],[[5],[1]]] 返回 [[2.0],[1.0]]。
 
 ## 配置说明
 

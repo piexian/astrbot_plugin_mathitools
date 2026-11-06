@@ -310,15 +310,15 @@ class MathStatisticsTool(FunctionTool):
 @dataclass
 class MathMatrixTool(FunctionTool):
     name: str = "math_matrix"
-    description: str = "矩阵运算；multiply 需要两个矩阵，其余运算把单个矩阵包成 [matrix]"
+    description: str = "矩阵运算；multiply 传 [A, B]、其余传 [A]；solve 传 [A, b 列矩阵] 解 Ax=b 返回 x 列矩阵，仅 solve 限 A 至多 50 阶"
     parameters: dict = field(
         default_factory=lambda: object_parameters(
             {
                 "operation": string_parameter(
-                    "矩阵运算: multiply, determinant, inverse, transpose, rank"
+                    "矩阵运算: " + ", ".join(MATRIX_OPERATIONS)
                 ),
                 "matrices": array_parameter(
-                    "矩阵列表；如 multiply 传 [A, B]，determinant 传 [A]",
+                    "矩阵列表；multiply 传 [A, B]，solve 传 [A, b 列矩阵]（A 至多 50 阶，返回 x 列矩阵），其余传 [A]",
                     items=array_parameter(
                         "矩阵的一行，如 [1, 2]",
                         items=array_parameter("元素", items=number_parameter("数值")),

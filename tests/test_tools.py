@@ -170,6 +170,8 @@ class ToolBehaviorTest(unittest.TestCase):
         self.assertIn("Add", result["operators"])
         self.assertIn("mean", result["statistics_operations"])
         self.assertIn("determinant", result["matrix_operations"])
+        self.assertEqual(len(result["matrix_operations"]), 6)
+        self.assertIn("solve", result["matrix_operations"])
         self.assertIn("is_prime", result["number_theory_operations"])
         self.assertIn("tax", result["finance_operations"])
 
@@ -270,6 +272,31 @@ class ToolBehaviorTest(unittest.TestCase):
         payload = _call(MathMatrixTool(), operation="determinant", matrices=[[[1, 2], [3, 4]]])
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["result"], -2.0)
+
+    def test_math_matrix_solve_ok(self):
+        payload = _call(
+            MathMatrixTool(), operation="solve", matrices=[[[2, 1], [1, -1]], [[5], [1]]]
+        )
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"], [[2.0], [1.0]])
+
+    def test_math_matrix_solve_errors(self):
+        payload = _call(MathMatrixTool(), operation="solve", matrices=[[[1, 2], [3, 4]]])
+        self.assertEqual(payload["error_code"], "invalid_argument")
+        payload = _call(
+            MathMatrixTool(), operation="solve", matrices=[[[1, 2], [3, 4]], [[1], [2], [3]]]
+        )
+        self.assertEqual(payload["error_code"], "matrix_dimension")
+        payload = _call(
+            MathMatrixTool(), operation="solve", matrices=[[[1, 2], [2, 4]], [[3], [7]]]
+        )
+        self.assertEqual(payload["error_code"], "singular_matrix")
+
+    def test_math_matrix_unknown_operation_lists_six_options(self):
+        payload = _call(MathMatrixTool(), operation="zz", matrices=[[[1]]])
+        self.assertEqual(payload["error_code"], "unknown_operation")
+        self.assertEqual(len(payload["valid_options"]), 6)
+        self.assertIn("solve", payload["valid_options"])
 
     def test_math_units_unknown_unit(self):
         payload = _call(MathUnitsTool(), value=1, from_unit="km", to_unit="zz", unit_type="length")
