@@ -1,4 +1,4 @@
-"""Windows Job Objects 限额：生产数值工作进程的自限入口。"""
+"""跨平台原生资源限额：Windows Job Objects 与 macOS RLIMIT。"""
 
 # 任务对象用户态 CPU 超时的原生终止码（STATUS_QUOTA_EXCEEDED）
 WINDOWS_CPU_LIMIT_EXIT_CODE = 0xC0000044
@@ -106,5 +106,48 @@ def set_windows_limits(*, process_memory=None, job_time_ticks=None) -> dict:
             "limit_flags": read.BasicLimitInformation.LimitFlags,
         },
         "struct_size": ctypes.sizeof(info),
+        "accepted": True,
+    }
+
+
+def set_macos_limits(*, address_space_headroom: int, cpu_seconds: int) -> dict:
+    """按 XNU 基线测量地址空间并设置 macOS 限额，返回观测报告。"""
+    import ctypes
+    import os
+    import resource
+
+    class _PROC_TASKINFO(ctypes.Structure):
+        _fields_ = [
+            (f"pti_uint64_{index}", ctypes.c_uint64) for index in range(6)
+        ] + [
+            (f"pti_int32_{index}", ctypes.c_int32) for index in range(12)
+        ]
+
+    libproc = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
+    libproc.proc_pidinfo.argtypes = [
+        ctypes.c_int, ctypes.c_int, ctypes.c_uint64,
+        ctypes.c_void_p, ctypes.c_int,
+    ]
+    libproc.proc_pidinfo.restype = ctypes.c_int
+
+    info = _PROC_TASKINFO()
+    written = libproc.proc_pidinfo(
+        os.getpid(), 4, 0, ctypes.byref(info), ctypes.sizeof(info)
+    )
+    if written < ctypes.sizeof(info):
+        raise OSError(
+            ctypes.get_errno(),
+            f"proc_pidinfo 只返回 {written} 字节，需要 {ctypes.sizeof(info)}",
+        )
+    baseline = info.pti_uint64_0
+    limit = baseline + address_space_headroom
+    resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
+    resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds + 1))
+    return {
+        "metric": "virtual_address_space",
+        "baseline_bytes": baseline,
+        "limit_bytes": limit,
+        "actual_as": list(resource.getrlimit(resource.RLIMIT_AS)),
+        "actual_cpu": list(resource.getrlimit(resource.RLIMIT_CPU)),
         "accepted": True,
     }

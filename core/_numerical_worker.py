@@ -27,6 +27,17 @@ def main() -> None:
                 )
             finally:
                 sys.path.remove(str(worker_dir))
+        elif sys.platform == "darwin":
+            sys.path.insert(0, str(worker_dir))
+            try:
+                from _resource_limits import set_macos_limits
+
+                set_macos_limits(
+                    address_space_headroom=128 * 1024 * 1024,
+                    cpu_seconds=10,
+                )
+            finally:
+                sys.path.remove(str(worker_dir))
         sys.path.insert(0, str(worker_dir.parent))
         from core.numerical import _calculate
 
